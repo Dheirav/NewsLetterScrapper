@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Intelligence Briefing — {{ date.strftime('%B %d, %Y') }}</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 17px; scroll-behavior: smooth; }
+  body {
+    font-family: "Georgia", "Times New Roman", serif;
+    background: #f5f4f0;
+    color: #1a1a1a;
+    line-height: 1.75;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* ── Header ──────────────────────────────────────────────────────── */
+  .header {
+    border-bottom: 3px solid #1a1a1a;
+    padding-bottom: 1.25rem;
+    margin-bottom: 2rem;
+  }
+  .header .masthead {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 0.35rem;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .header .meta {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 0.5rem;
+  }
+
+  /* ── Section headings ────────────────────────────────────────────── */
+  .section-header {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #888;
+    border-top: 1px solid #ccc;
+    padding-top: 1.5rem;
+    margin-top: 2.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ── Story card ───────────────────────────────────────────────────── */
+  .story {
+    background: #fff;
+    border: 1px solid #e0ddd8;
+    border-radius: 4px;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  .story-label {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #aaa;
+    margin-bottom: 0.5rem;
+  }
+  .story h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    margin-bottom: 1rem;
+  }
+
+  /* ── Knowledge sections ───────────────────────────────────────────── */
+  .knowledge-section { margin-bottom: 1.25rem; }
+  .knowledge-section .kh {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 0.35rem;
+  }
+  .knowledge-section p {
+    font-size: 0.95rem;
+    color: #333;
+  }
+
+  /* ── Talking points ───────────────────────────────────────────────── */
+  .talking-points-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .talking-points-list li {
+    font-size: 0.93rem;
+    color: #333;
+    padding: 0.4rem 0 0.4rem 1.25rem;
+    position: relative;
+    border-bottom: 1px dotted #e8e5e0;
+  }
+  .talking-points-list li:last-child { border-bottom: none; }
+  .talking-points-list li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: #aaa;
+  }
+
+  /* ── Reliability badge ────────────────────────────────────────────── */
+  .reliability {
+    margin-top: 1.1rem;
+    background: #f9f7f3;
+    border-left: 3px solid #d4b483;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.8rem;
+    color: #666;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .reliability .rel-label {
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 0.65rem;
+    color: #b8924d;
+    margin-bottom: 0.25rem;
+  }
+
+  /* ── Sources row ──────────────────────────────────────────────────── */
+  .sources-row {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.72rem;
+    color: #bbb;
+    margin-top: 1rem;
+  }
+  .sources-row a { color: #888; text-decoration: none; }
+  .sources-row a:hover { text-decoration: underline; }
+
+  /* ── Footer ───────────────────────────────────────────────────────── */
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #ccc;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.75rem;
+    color: #aaa;
+    text-align: center;
+  }
+
+  /* ── Responsive ───────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    body { padding: 1rem 1rem 3rem; font-size: 16px; }
+    .story { padding: 1.25rem 1.25rem; }
+    .header h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body data-newsletter-date="{{ date.isoformat() }}">
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header class="header">
+  <div class="masthead">Your Personal Intelligence Briefing</div>
+  <h1>{{ date.strftime('%A, %B %d %Y') }}</h1>
+  <div class="meta">{{ stories|length }} stories · Generated by local intelligence pipeline</div>
+</header>
+
+<!-- ═══════════════ STORIES ═══════════════ -->
+{% set ns = namespace(current_domain='') %}
+{% for story in stories %}
+  {% set domain = story.topic_label | domain_for %}
+  {% if domain != ns.current_domain %}
+    {% set ns.current_domain = domain %}
+    <div class="section-header">{{ domain }}</div>
+  {% endif %}
+
+  <article
+    class="story"
+    data-topic-slug="{{ story.topic_label | slugify }}"
+    data-story-index="{{ loop.index0 }}"
+  >
+    <div class="story-label">{{ domain }} · {{ story.source_count }} source{{ 's' if story.source_count != 1 }}</div>
+    <h2>{{ story.topic_label }}</h2>
+
+    <!-- Executive Summary -->
+    <div class="knowledge-section" data-section="executive_summary">
+      <div class="kh">Executive Summary</div>
+      <p>{{ story.executive_summary }}</p>
+    </div>
+
+    <!-- Context -->
+    <div class="knowledge-section" data-section="context">
+      <div class="kh">Context</div>
+      <p>{{ story.context }}</p>
+    </div>
+
+    <!-- Why It Matters -->
+    <div class="knowledge-section" data-section="why_it_matters">
+      <div class="kh">Why It Matters</div>
+      <p>{{ story.why_it_matters }}</p>
+    </div>
+
+    <!-- Implications -->
+    <div class="knowledge-section" data-section="implications">
+      <div class="kh">Implications</div>
+      <p>{{ story.implications }}</p>
+    </div>
+
+    <!-- Talking Points -->
+    {% if story.talking_points %}
+    <div class="knowledge-section" data-section="talking_points">
+      <div class="kh">Talking Points</div>
+      <ul class="talking-points-list">
+        {% for point in story.talking_points %}
+        <li>{{ point }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Reliability -->
+    {% if story.reliability_notes %}
+    <div class="reliability">
+      <div class="rel-label">Source Reliability</div>
+      {{ story.reliability_notes }}
+    </div>
+    {% endif %}
+
+    <!-- Article links -->
+    {% if story.article_urls %}
+    <div class="sources-row">
+      Sources:
+      {% for url, src in zip(story.article_urls[:5], story.article_sources[:5]) %}
+        <a href="{{ url }}" target="_blank" rel="noopener">{{ src }}</a>{% if not loop.last %} · {% endif %}
+      {% endfor %}
+      {% if story.article_urls|length > 5 %}
+        · <span style="color:#ccc">+{{ story.article_urls|length - 5 }} more</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </article>
+{% endfor %}
+
+<footer class="footer">
+  <p>Generated {{ date.strftime('%B %d, %Y') }} · Personal Intelligence Pipeline · Powered by Ollama + pgvector</p>
+</footer>
+
+<!-- ═══════════════ READING TRACKER ═══════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  const API_BASE = '/api';  // FastAPI backend
+  const newsletter_date = document.body.dataset.newsletterDate;
+  const startTime = Date.now();
+
+  // Track which sections have been viewed (IntersectionObserver)
+  const sectionsRead = new Set();
+  const storyTimes = {};   // topic_slug → {start, totalSeconds}
+
+  const sectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const section = entry.target.dataset.section;
+        if (section) sectionsRead.add(section);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  document.querySelectorAll('[data-section]').forEach(el => sectionObserver.observe(el));
+
+  // Track time per story card
+  const storyObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const slug = entry.target.dataset.topicSlug;
+      if (!slug) return;
+      if (entry.isIntersecting) {
+        storyTimes[slug] = storyTimes[slug] || { start: Date.now(), total: 0 };
+        storyTimes[slug].start = Date.now();
+      } else if (storyTimes[slug] && storyTimes[slug].start) {
+        storyTimes[slug].total += (Date.now() - storyTimes[slug].start);
+        storyTimes[slug].start = null;
+      }
+    });
+  }, { threshold: 0.3 });
+
+  document.querySelectorAll('.story[data-topic-slug]').forEach(el => storyObserver.observe(el));
+
+  function getScrollPercent() {
+    const el = document.documentElement;
+    return Math.min(100, Math.round(
+      (el.scrollTop / (el.scrollHeight - el.clientHeight)) * 100
+    ));
+  }
+
+  async function sendEvents() {
+    const scrollPercent = getScrollPercent();
+
+    // Flush any stories still in view
+    document.querySelectorAll('.story[data-topic-slug]').forEach(el => {
+      const slug = el.dataset.topicSlug;
+      if (storyTimes[slug] && storyTimes[slug].start) {
+        storyTimes[slug].total += (Date.now() - storyTimes[slug].start);
+        storyTimes[slug].start = null;
+      }
+    });
+
+    const events = Object.entries(storyTimes).map(([slug, data]) => ({
+      date: newsletter_date,
+      topic_slug: slug,
+      time_spent_seconds: Math.round(data.total / 1000),
+      scroll_percent: scrollPercent,
+      sections_read: Array.from(sectionsRead),
+    }));
+
+    for (const event of events) {
+      if (event.time_spent_seconds < 2) continue;  // skip accidental hovers
+      try {
+        await fetch(`${API_BASE}/events/reading`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(event),
+          keepalive: true,
+        });
+      } catch (e) { /* silently ignore network errors */ }
+    }
+  }
+
+  window.addEventListener('beforeunload', sendEvents);
+  // Also send every 60s in case tab is left open
+  setInterval(sendEvents, 60000);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Knowledge Graph Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#c9d1d9;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+  /* ── Top bar ── */
+  #topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#161b22;border-bottom:1px solid #30363d;flex-shrink:0}
+  #topbar h1{font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap}
+  #topbar input{flex:1;max-width:280px;padding:5px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#c9d1d9;font-size:13px;outline:none}
+  #topbar input:focus{border-color:#58a6ff}
+  #days-label{font-size:12px;color:#8b949e;white-space:nowrap}
+  #days-input{width:56px;padding:4px 8px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#c9d1d9;font-size:13px;text-align:center}
+  .btn{padding:5px 12px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#c9d1d9;cursor:pointer;font-size:12px;white-space:nowrap}
+  .btn:hover{background:#30363d}
+  .btn.danger{border-color:#f85149;color:#f85149}
+  .btn.danger:hover{background:#2d1416}
+  .btn.primary{border-color:#58a6ff;color:#58a6ff}
+  .btn.primary:hover{background:#1c2c3e}
+
+  /* ── Stats bar ── */
+  #statsbar{padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;font-size:11px;color:#8b949e;display:flex;gap:20px;flex-shrink:0}
+  .stat-pill{display:flex;align-items:center;gap:5px}
+  .stat-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+  /* ── Main layout ── */
+  #main{display:flex;flex:1;overflow:hidden}
+  #canvas{flex:1;position:relative;overflow:hidden}
+  svg{width:100%;height:100%}
+
+  /* ── Legend ── */
+  #legend{position:absolute;bottom:16px;left:16px;background:#161b22cc;border:1px solid #30363d;border-radius:8px;padding:10px 14px;font-size:11px;backdrop-filter:blur(4px)}
+  .legend-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+  .legend-row:last-child{margin-bottom:0}
+  .legend-circle{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+  /* ── Detail panel ── */
+  #panel{width:380px;background:#161b22;border-left:1px solid #30363d;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:width .2s}
+  #panel.hidden{width:0;border-left:none}
+  #panel-header{padding:12px 16px;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+  #panel-type-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
+  #panel-close{cursor:pointer;color:#8b949e;font-size:18px;line-height:1;padding:2px 4px;border-radius:4px}
+  #panel-close:hover{color:#c9d1d9;background:#21262d}
+  #panel-body{flex:1;overflow-y:auto;padding:16px}
+  #panel-title{font-size:14px;font-weight:600;color:#e6edf3;margin-bottom:12px;line-height:1.4}
+  .field{margin-bottom:12px}
+  .field-label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8b949e;margin-bottom:4px}
+  .field-value{font-size:12px;color:#c9d1d9;line-height:1.5;word-break:break-word}
+  .field-value a{color:#58a6ff;text-decoration:none}
+  .field-value a:hover{text-decoration:underline}
+  #panel-actions{padding:12px 16px;border-top:1px solid #30363d;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+
+  /* ── Edit form ── */
+  #edit-form{display:none;padding:12px 16px;border-top:1px solid #30363d;flex-direction:column;gap:8px;flex-shrink:0}
+  #edit-form.visible{display:flex}
+  .edit-field label{font-size:11px;color:#8b949e;display:block;margin-bottom:3px}
+  .edit-field input,.edit-field textarea{width:100%;padding:6px 8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:12px;resize:vertical;outline:none}
+  .edit-field input:focus,.edit-field textarea:focus{border-color:#58a6ff}
+  .edit-actions{display:flex;gap:8px}
+
+  /* ── Link lines ── */
+  .link{stroke-opacity:.45;stroke-width:1.2}
+  .link.member{stroke:#58a6ff}
+  .link.knowledge{stroke:#3fb950}
+  .link.published{stroke:#bc8cff}
+
+  /* ── Nodes ── */
+  .node circle{cursor:pointer;stroke-width:1.5}
+  .node circle:hover{stroke-width:3}
+  .node text{pointer-events:none;font-size:10px;fill:#8b949e;dominant-baseline:middle}
+  .node.selected circle{stroke-width:3;stroke:#e6edf3!important}
+
+  /* ── Loading overlay ── */
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0d1117cc;font-size:14px;color:#8b949e}
+  #loading.hidden{display:none}
+
+  /* ── Toast ── */
+  #toast{position:fixed;bottom:24px;right:24px;padding:10px 16px;background:#21262d;border:1px solid #30363d;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
+  #toast.show{opacity:1}
+  #toast.error{border-color:#f85149;color:#f85149}
+  #toast.success{border-color:#3fb950;color:#3fb950}
+
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:6px}
+  ::-webkit-scrollbar-track{background:#0d1117}
+  ::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>⬡ Knowledge Graph</h1>
+  <input id="search" type="text" placeholder="Search nodes…" autocomplete="off"/>
+  <span id="days-label">Days:</span>
+  <input id="days-input" type="number" value="7" min="1" max="90"/>
+  <button class="btn primary" id="reload-btn">Reload</button>
+  <button class="btn" id="reset-zoom-btn">Reset Zoom</button>
+</div>
+
+<div id="statsbar">
+  <span class="stat-pill"><span class="stat-dot" style="background:#58a6ff"></span><span id="stat-articles">— articles</span></span>
+  <span class="stat-pill"><span class="stat-dot" style="background:#e3b341"></span><span id="stat-clusters">— clusters</span></span>
+  <span class="stat-pill"><span class="stat-dot" style="background:#3fb950"></span><span id="stat-stories">— stories</span></span>
+  <span class="stat-pill"><span class="stat-dot" style="background:#bc8cff"></span><span id="stat-newsletters">— newsletters</span></span>
+  <span id="stat-total" style="margin-left:auto;color:#6e7681"></span>
+</div>
+
+<div id="main">
+  <div id="canvas">
+    <svg id="svg"></svg>
+    <div id="legend">
+      <div class="legend-row"><span class="legend-circle" style="background:#58a6ff"></span>Article</div>
+      <div class="legend-row"><span class="legend-circle" style="background:#e3b341"></span>Cluster</div>
+      <div class="legend-row"><span class="legend-circle" style="background:#3fb950"></span>Story</div>
+      <div class="legend-row"><span class="legend-circle" style="background:#bc8cff"></span>Newsletter</div>
+    </div>
+    <div id="loading">Loading graph…</div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div id="panel-header">
+      <span id="panel-type-badge"></span>
+      <span id="panel-close">×</span>
+    </div>
+    <div id="panel-body">
+      <div id="panel-title"></div>
+      <div id="panel-fields"></div>
+    </div>
+    <div id="panel-actions"></div>
+    <div id="edit-form" id="edit-section">
+      <div id="edit-fields"></div>
+      <div class="edit-actions">
+        <button class="btn primary" id="save-btn">Save</button>
+        <button class="btn" id="cancel-edit-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '/api/graph';
+const COLORS = { article:'#58a6ff', cluster:'#e3b341', story:'#3fb950', newsletter:'#bc8cff' };
+const RADII  = { article:5, cluster:10, story:8, newsletter:14 };
+const BADGE_BG = { article:'#1c2c3e', cluster:'#2d2208', story:'#122117', newsletter:'#1c1040' };
+
+let graphData = {nodes:[], edges:[]};
+let simulation, svg, g, linkSel, nodeSel;
+let selectedNode = null;
+let editingNode = null;
+
+// ── Fetch helpers ──────────────────────────────────────────────────────────
+
+async function apiFetch(path, opts={}) {
+  const r = await fetch(API + path, {
+    headers: {'Content-Type':'application/json'},
+    ...opts,
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t);
+  }
+  return opts.method === 'DELETE' ? r.json() : r.json();
+}
+
+// ── Stats bar ──────────────────────────────────────────────────────────────
+
+async function loadStats() {
+  try {
+    const s = await apiFetch('/stats');
+    document.getElementById('stat-articles').textContent   = `${s.articles} articles`;
+    document.getElementById('stat-clusters').textContent   = `${s.clusters} clusters`;
+    document.getElementById('stat-stories').textContent    = `${s.knowledge_stories} stories`;
+    document.getElementById('stat-newsletters').textContent= `${s.newsletters} newsletters`;
+  } catch(e) {}
+}
+
+// ── Load + render graph ────────────────────────────────────────────────────
+
+async function loadGraph() {
+  const days = parseInt(document.getElementById('days-input').value) || 7;
+  document.getElementById('loading').classList.remove('hidden');
+  try {
+    graphData = await apiFetch(`/data?days=${days}`);
+    renderGraph(graphData);
+    document.getElementById('stat-total').textContent =
+      `${graphData.nodes.length} nodes · ${graphData.edges.length} edges`;
+    loadStats();
+  } catch(e) {
+    showToast('Failed to load graph: ' + e.message, 'error');
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+function renderGraph(data) {
+  const svgEl = document.getElementById('svg');
+  const W = svgEl.clientWidth, H = svgEl.clientHeight;
+  d3.select('#svg').selectAll('*').remove();
+
+  svg = d3.select('#svg');
+  const defs = svg.append('defs');
+  // Arrow markers
+  ['member','knowledge','published'].forEach(type => {
+    defs.append('marker')
+      .attr('id','arrow-'+type)
+      .attr('viewBox','0 -4 10 8')
+      .attr('refX',18).attr('refY',0)
+      .attr('markerWidth',6).attr('markerHeight',6)
+      .attr('orient','auto')
+      .append('path')
+      .attr('d','M0,-4L10,0L0,4')
+      .attr('fill', type==='member'?'#58a6ff': type==='knowledge'?'#3fb950':'#bc8cff')
+      .attr('opacity',.5);
+  });
+
+  g = svg.append('g');
+
+  // Zoom
+  const zoom = d3.zoom().scaleExtent([0.05, 4]).on('zoom', e => g.attr('transform', e.transform));
+  svg.call(zoom);
+  window._resetZoom = () => svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+
+  // Build node + edge lookup
+  const nodeById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
+
+  linkSel = g.append('g').attr('class','links')
+    .selectAll('line')
+    .data(data.edges)
+    .join('line')
+    .attr('class', d => `link ${d.type}`)
+    .attr('marker-end', d => `url(#arrow-${d.type})`);
+
+  nodeSel = g.append('g').attr('class','nodes')
+    .selectAll('g')
+    .data(data.nodes)
+    .join('g')
+    .attr('class','node')
+    .call(d3.drag()
+      .on('start', dragstarted)
+      .on('drag',  dragged)
+      .on('end',   dragended))
+    .on('click', (event, d) => { event.stopPropagation(); selectNode(d); });
+
+  nodeSel.append('circle')
+    .attr('r', d => RADII[d.type] || 6)
+    .attr('fill', d => COLORS[d.type] || '#8b949e')
+    .attr('fill-opacity', .85)
+    .attr('stroke', d => COLORS[d.type] || '#8b949e')
+    .attr('stroke-opacity', .6);
+
+  nodeSel.append('text')
+    .attr('x', d => (RADII[d.type]||6) + 4)
+    .attr('y', 0)
+    .text(d => d.label.length > 28 ? d.label.slice(0,28)+'…' : d.label);
+
+  // Click on blank area → deselect
+  svg.on('click', () => closePanel());
+
+  simulation = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.edges)
+      .id(d => d.id)
+      .distance(d => d.type==='knowledge'?80 : d.type==='member'?50 : 120)
+      .strength(.6))
+    .force('charge', d3.forceManyBody().strength(d => RADII[d.type]||6).strength(-180))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide().radius(d => (RADII[d.type]||6)+12))
+    .on('tick', ticked);
+
+  function ticked() {
+    linkSel
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+  }
+
+  function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(.3).restart();
+    d.fx = d.x; d.fy = d.y;
+  }
+  function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+  function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null; d.fy = null;
+  }
+}
+
+// ── Search / filter ────────────────────────────────────────────────────────
+
+document.getElementById('search').addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  if (!nodeSel) return;
+  nodeSel.style('opacity', d =>
+    !q || d.label.toLowerCase().includes(q) ||
+    (d.data.source||'').toLowerCase().includes(q) ? 1 : 0.08
+  );
+  linkSel && linkSel.style('opacity', d =>
+    !q ? 0.45 : 0.08
+  );
+});
+
+// ── Node detail panel ──────────────────────────────────────────────────────
+
+function selectNode(d) {
+  selectedNode = d;
+  editingNode = null;
+  document.getElementById('edit-form').classList.remove('visible');
+
+  // Highlight
+  if (nodeSel) nodeSel.classed('selected', n => n.id === d.id);
+
+  const panel = document.getElementById('panel');
+  panel.classList.remove('hidden');
+
+  const badge = document.getElementById('panel-type-badge');
+  badge.textContent = d.type;
+  badge.style.background = BADGE_BG[d.type]||'#21262d';
+  badge.style.color = COLORS[d.type]||'#c9d1d9';
+
+  document.getElementById('panel-title').textContent = d.label;
+  renderFields(d);
+  renderActions(d);
+}
+
+function renderFields(d) {
+  const container = document.getElementById('panel-fields');
+  container.innerHTML = '';
+
+  const fieldDefs = {
+    article: [
+      ['Source', 'source'],
+      ['URL', 'url', v => `<a href="${v}" target="_blank" rel="noopener">${v}</a>`],
+      ['Published', 'published_at'],
+      ['Cluster', 'cluster_id'],
+    ],
+    cluster: [
+      ['Date', 'cluster_date'],
+      ['Articles', 'article_count'],
+    ],
+    story: [
+      ['Date', 'story_date'],
+      ['Sources', 'source_count'],
+      ['Summary', 'executive_summary'],
+    ],
+    newsletter: [
+      ['Date', 'newsletter_date'],
+      ['Sent', 'sent', v => v ? '✓ Sent' : '✗ Not sent'],
+      ['Sent at', 'sent_at'],
+    ],
+  };
+
+  (fieldDefs[d.type]||[]).forEach(([label, key, fmt]) => {
+    const val = d.data[key];
+    if (val === null || val === undefined) return;
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = `<div class="field-label">${label}</div>
+      <div class="field-value">${fmt ? fmt(val) : escHtml(String(val))}</div>`;
+    container.appendChild(div);
+  });
+}
+
+function renderActions(d) {
+  const actions = document.getElementById('panel-actions');
+  actions.innerHTML = '';
+
+  const editBtn = document.createElement('button');
+  editBtn.className = 'btn primary';
+  editBtn.textContent = 'Edit';
+  editBtn.onclick = () => startEdit(d);
+  actions.appendChild(editBtn);
+
+  if (d.type === 'story') {
+    const detailBtn = document.createElement('button');
+    detailBtn.className = 'btn';
+    detailBtn.textContent = 'Full Story';
+    detailBtn.onclick = () => loadFullStory(d.data.id);
+    actions.appendChild(detailBtn);
+  }
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'btn danger';
+  delBtn.textContent = 'Delete';
+  delBtn.onclick = () => confirmDelete(d);
+  actions.appendChild(delBtn);
+}
+
+// ── Full story viewer ──────────────────────────────────────────────────────
+
+async function loadFullStory(id) {
+  try {
+    const story = await apiFetch(`/stories/${id}`);
+    const container = document.getElementById('panel-fields');
+    container.innerHTML = '';
+    const fields = [
+      ['Summary', story.executive_summary],
+      ['Context', story.context],
+      ['Why It Matters', story.why_it_matters],
+      ['Implications', story.implications],
+      ['Talking Points', story.talking_points.map((t,i)=>`${i+1}. ${t}`).join('<br>')],
+      ['Reliability', story.reliability_notes],
+      ['Sources', story.article_sources.join(', ')],
+    ];
+    fields.forEach(([label, val]) => {
+      if (!val) return;
+      const div = document.createElement('div');
+      div.className = 'field';
+      div.innerHTML = `<div class="field-label">${label}</div>
+        <div class="field-value">${escHtml(String(val)).replace(/\n/g,'<br>')}</div>`;
+      container.appendChild(div);
+    });
+  } catch(e) {
+    showToast('Failed to load story: ' + e.message, 'error');
+  }
+}
+
+// ── Edit ───────────────────────────────────────────────────────────────────
+
+function startEdit(d) {
+  editingNode = d;
+  const form = document.getElementById('edit-form');
+  const fields = document.getElementById('edit-fields');
+  fields.innerHTML = '';
+
+  const editDefs = {
+    article: [['title','Title','input'],['content','Content','textarea'],['source','Source','input']],
+    cluster: [['topic_label','Topic Label','input']],
+    story: [
+      ['topic_label','Topic Label','input'],
+      ['executive_summary','Executive Summary','textarea'],
+      ['context','Context','textarea'],
+      ['why_it_matters','Why It Matters','textarea'],
+      ['implications','Implications','textarea'],
+    ],
+    newsletter: [],
+  };
+
+  (editDefs[d.type]||[]).forEach(([key, label, tag]) => {
+    const div = document.createElement('div');
+    div.className = 'edit-field';
+    const val = escHtml(String(d.data[key]||''));
+    if (tag === 'textarea') {
+      div.innerHTML = `<label>${label}</label>
+        <textarea rows="3" data-key="${key}">${val}</textarea>`;
+    } else {
+      div.innerHTML = `<label>${label}</label>
+        <input type="text" data-key="${key}" value="${val}"/>`;
+    }
+    fields.appendChild(div);
+  });
+
+  form.classList.add('visible');
+  document.getElementById('panel-actions').innerHTML = '';
+}
+
+document.getElementById('save-btn').addEventListener('click', async () => {
+  const d = editingNode;
+  if (!d) return;
+  const payload = {};
+  document.querySelectorAll('#edit-fields [data-key]').forEach(el => {
+    if (el.value.trim()) payload[el.dataset.key] = el.value.trim();
+  });
+
+  try {
+    const pathMap = { article:`/articles/${d.data.id}`, cluster:`/clusters/${d.data.cluster_id}`, story:`/stories/${d.data.id}`, newsletter:null };
+    const path = pathMap[d.type];
+    if (!path) return;
+    await apiFetch(path, { method:'PATCH', body: JSON.stringify(payload) });
+
+    // Update local node label
+    const labelKey = d.type==='cluster'||d.type==='story' ? 'topic_label' : 'title';
+    if (payload[labelKey]) {
+      d.label = payload[labelKey].slice(0,60);
+      d.data[labelKey] = payload[labelKey];
+      document.getElementById('panel-title').textContent = d.label;
+      if (nodeSel) nodeSel.select('text').text(n => n.id===d.id ? (d.label.length>28?d.label.slice(0,28)+'…':d.label) : (n.label.length>28?n.label.slice(0,28)+'…':n.label));
+    }
+
+    document.getElementById('edit-form').classList.remove('visible');
+    renderActions(d);
+    showToast('Saved successfully', 'success');
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
+});
+
+document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+  document.getElementById('edit-form').classList.remove('visible');
+  if (editingNode) renderActions(editingNode);
+  editingNode = null;
+});
+
+// ── Delete ─────────────────────────────────────────────────────────────────
+
+async function confirmDelete(d) {
+  const labels = { article:'article', cluster:'cluster and its knowledge story', story:'knowledge story', newsletter:'newsletter' };
+  if (!confirm(`Delete this ${labels[d.type]}?\n\n"${d.label}"\n\nThis cannot be undone.`)) return;
+
+  try {
+    const pathMap = { article:`/articles/${d.data.id}`, cluster:`/clusters/${d.data.cluster_id}`, story:`/stories/${d.data.id}`, newsletter:null };
+    const path = pathMap[d.type];
+    if (!path) { showToast('Cannot delete newsletters from the UI', 'error'); return; }
+    await apiFetch(path, { method:'DELETE' });
+
+    // Remove from graph
+    graphData.nodes = graphData.nodes.filter(n => n.id !== d.id);
+    graphData.edges = graphData.edges.filter(e => e.source.id!==d.id && e.target.id!==d.id);
+    closePanel();
+    renderGraph(graphData);
+    showToast('Deleted', 'success');
+    loadStats();
+  } catch(e) {
+    showToast('Delete failed: ' + e.message, 'error');
+  }
+}
+
+// ── Panel close ────────────────────────────────────────────────────────────
+
+function closePanel() {
+  document.getElementById('panel').classList.add('hidden');
+  document.getElementById('edit-form').classList.remove('visible');
+  selectedNode = null;
+  editingNode = null;
+  if (nodeSel) nodeSel.classed('selected', false);
+}
+
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+// ── Toolbar buttons ────────────────────────────────────────────────────────
+
+document.getElementById('reload-btn').addEventListener('click', loadGraph);
+document.getElementById('reset-zoom-btn').addEventListener('click', () => window._resetZoom && window._resetZoom());
+document.getElementById('days-input').addEventListener('keydown', e => { if (e.key==='Enter') loadGraph(); });
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+
+loadGraph();
+</script>
+</body>
+</html>

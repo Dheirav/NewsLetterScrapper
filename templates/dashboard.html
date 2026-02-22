@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Intelligence Briefing — Home</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-brand { display: flex; align-items: center; gap: 12px; }
+  .header-brand svg { color: #58a6ff; }
+  header h1 { font-size: 18px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+  header p { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .header-date {
+    font-size: 12px;
+    color: #8b949e;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+  .header-date span { color: #58a6ff; font-weight: 600; }
+
+  /* ── Main grid ── */
+  main {
+    flex: 1;
+    padding: 40px 32px;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8b949e;
+    margin-bottom: 16px;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 22px 24px;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .card:hover::before { opacity: 1; }
+  .card:active { transform: translateY(0); }
+
+  .card.blue { border-top: 3px solid #58a6ff; }
+  .card.blue:hover { border-color: #58a6ff; background: #0d1f33; }
+  .card.blue::before { background: radial-gradient(ellipse at top left, #58a6ff08, transparent 60%); }
+
+  .card.green { border-top: 3px solid #3fb950; }
+  .card.green:hover { border-color: #3fb950; background: #0d1f14; }
+  .card.green::before { background: radial-gradient(ellipse at top left, #3fb95008, transparent 60%); }
+
+  .card.purple { border-top: 3px solid #bc8cff; }
+  .card.purple:hover { border-color: #bc8cff; background: #1a0d33; }
+  .card.purple::before { background: radial-gradient(ellipse at top left, #bc8cff08, transparent 60%); }
+
+  .card.orange { border-top: 3px solid #f0883e; }
+  .card.orange:hover { border-color: #f0883e; background: #281a0d; }
+  .card.orange::before { background: radial-gradient(ellipse at top left, #f0883e08, transparent 60%); }
+
+  .card.gray { border-top: 3px solid #484f58; }
+  .card.gray:hover { border-color: #58a6ff; background: #161b22ee; }
+
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 18px;
+  }
+  .card.blue .card-icon    { background: #1c2c3e; }
+  .card.green .card-icon   { background: #0d2214; }
+  .card.purple .card-icon  { background: #1e0d33; }
+  .card.orange .card-icon  { background: #2a1a0a; }
+  .card.gray .card-icon    { background: #21262d; }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e6edf3;
+    line-height: 1.3;
+  }
+  .card-desc {
+    font-size: 12px;
+    color: #8b949e;
+    line-height: 1.5;
+  }
+  .card-arrow {
+    margin-top: auto;
+    font-size: 12px;
+    color: #484f58;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.15s, gap 0.15s;
+  }
+  .card:hover .card-arrow { color: #8b949e; gap: 8px; }
+
+  /* ── Date nav ── */
+  .date-nav {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  .date-nav h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e6edf3;
+    margin-bottom: 14px;
+  }
+  .date-nav-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .date-nav input[type="date"] {
+    padding: 7px 12px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    color-scheme: dark;
+  }
+  .date-nav input[type="date"]:focus { border-color: #58a6ff; }
+
+  .btn {
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #c9d1d9;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .btn:hover { background: #30363d; }
+  .btn.primary {
+    border-color: #58a6ff;
+    color: #58a6ff;
+  }
+  .btn.primary:hover { background: #1c2c3e; }
+  .btn.green-btn {
+    border-color: #3fb950;
+    color: #3fb950;
+  }
+  .btn.green-btn:hover { background: #0d2214; }
+
+  /* ── Quick links ── */
+  .quicklinks {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ql {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #8b949e;
+    text-decoration: none;
+    transition: all 0.12s;
+  }
+  .ql:hover { border-color: #58a6ff; color: #58a6ff; background: #1c2c3e; }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid #21262d;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    color: #484f58;
+  }
+  footer a { color: #484f58; text-decoration: none; }
+  footer a:hover { color: #8b949e; }
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #3fb950;
+    margin-right: 5px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+      <path d="M2 17l10 5 10-5"/>
+      <path d="M2 12l10 5 10-5"/>
+    </svg>
+    <div>
+      <h1>Intelligence Briefing</h1>
+      <p>Personal daily news digest &amp; knowledge explorer</p>
+    </div>
+  </div>
+  <div class="header-date">Today: <span id="today-label">—</span></div>
+</header>
+
+<main>
+
+  <!-- Primary views -->
+  <div class="section-label">Primary Views</div>
+  <div class="card-grid">
+
+    <a class="card blue" href="/api/newsletter/today">
+      <div class="card-icon">📰</div>
+      <div class="card-title">Today's Newsletter</div>
+      <div class="card-desc">Read today's compiled intelligence briefing — curated stories, summaries, and insights.</div>
+      <div class="card-arrow">Open today's edition →</div>
+    </a>
+
+    <a class="card purple" href="/api/graph">
+      <div class="card-icon">🕸️</div>
+      <div class="card-title">Knowledge Graph</div>
+      <div class="card-desc">Explore articles and story clusters as an interactive Obsidian-style force graph.</div>
+      <div class="card-arrow">Open graph explorer →</div>
+    </a>
+
+    <a class="card green" href="/api/reflection/today">
+      <div class="card-icon">🪞</div>
+      <div class="card-title">Today's Reflection</div>
+      <div class="card-desc">Review your reading stats, time spent per topic, and an AI-generated reading summary.</div>
+      <div class="card-arrow">Open reflection →</div>
+    </a>
+
+    <a class="card orange" href="/api/graph/clusters">
+      <div class="card-icon">🗂️</div>
+      <div class="card-title">Story Clusters</div>
+      <div class="card-desc">Browse all story clusters — grouped articles covering the same event or topic.</div>
+      <div class="card-arrow">Browse clusters →</div>
+    </a>
+
+  </div>
+
+  <!-- Date navigator -->
+  <div class="date-nav">
+    <h3>📅 Browse by Date</h3>
+    <div class="date-nav-row">
+      <input type="date" id="pick-date" />
+      <button class="btn primary" onclick="goNewsletter()">📰 Open Newsletter</button>
+      <button class="btn green-btn" onclick="goReflection()">🪞 Open Reflection</button>
+    </div>
+  </div>
+
+  <!-- Dev / API -->
+  <div class="section-label">Developer & API</div>
+  <div class="card-grid">
+
+    <a class="card gray" href="/docs">
+      <div class="card-icon">📖</div>
+      <div class="card-title">API Documentation</div>
+      <div class="card-desc">Interactive Swagger UI — explore and test all available API endpoints.</div>
+      <div class="card-arrow">Open Swagger UI →</div>
+    </a>
+
+    <a class="card gray" href="/redoc">
+      <div class="card-icon">📋</div>
+      <div class="card-title">ReDoc Reference</div>
+      <div class="card-desc">Clean, readable API reference documentation generated from the OpenAPI schema.</div>
+      <div class="card-arrow">Open ReDoc →</div>
+    </a>
+
+    <a class="card gray" href="/health">
+      <div class="card-icon">💓</div>
+      <div class="card-title">Health Check</div>
+      <div class="card-desc">Liveness and readiness probe — confirms the API process and database are reachable.</div>
+      <div class="card-arrow">Check health →</div>
+    </a>
+
+    <a class="card gray" href="/api/graph/stats">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Database Stats</div>
+      <div class="card-desc">Overall article count, cluster count, stories, newsletters — live from the database.</div>
+      <div class="card-arrow">View stats →</div>
+    </a>
+
+  </div>
+
+  <!-- Quick links -->
+  <div class="section-label">Quick Links</div>
+  <div class="quicklinks">
+    <a class="ql" href="/api/newsletter/today">Today's Newsletter</a>
+    <a class="ql" href="/api/graph">Graph Explorer</a>
+    <a class="ql" href="/api/reflection/today">Today's Reflection</a>
+    <a class="ql" href="/api/graph/clusters">Clusters</a>
+    <a class="ql" href="/api/graph/articles">Articles</a>
+    <a class="ql" href="/api/graph/stories">Stories</a>
+    <a class="ql" href="/api/graph/data">Graph Data (JSON)</a>
+    <a class="ql" href="/api/graph/stats">Stats (JSON)</a>
+    <a class="ql" href="/docs">Swagger</a>
+    <a class="ql" href="/redoc">ReDoc</a>
+    <a class="ql" href="/health">Health</a>
+  </div>
+
+</main>
+
+<footer>
+  <div><span class="status-dot"></span>API running on <strong style="color:#8b949e">http://0.0.0.0:8000</strong></div>
+  <div>
+    <a href="/docs">Swagger</a> &nbsp;·&nbsp;
+    <a href="/redoc">ReDoc</a> &nbsp;·&nbsp;
+    <a href="/health">Health</a>
+  </div>
+</footer>
+
+<script>
+  // Set today's date label and default date picker value
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('today-label').textContent = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+  document.getElementById('pick-date').value = today;
+  document.getElementById('pick-date').max = today;
+
+  function goNewsletter() {
+    const d = document.getElementById('pick-date').value;
+    if (d) window.location.href = '/api/newsletter/' + d;
+  }
+  function goReflection() {
+    const d = document.getElementById('pick-date').value;
+    if (d) window.location.href = '/api/reflection/' + d;
+  }
+</script>
+</body>
+</html>

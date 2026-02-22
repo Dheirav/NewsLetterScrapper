@@ -1,0 +1,94 @@
+version: "3.9"
+
+# Intelligence Briefing — local development stack
+# ─────────────────────────────────────────────────────────────────────────────
+# One-command start:
+#   docker compose up -d        # all services in background
+#   docker compose logs -f app  # follow app logs
+#
+# Run the daily pipeline manually:
+#   docker compose exec app python scripts/run_pipeline.py
+#   docker compose exec app python scripts/run_pipeline.py --mode detailed
+#
+# Archive old articles:
+#   docker compose exec app python scripts/archive.py --dry-run
+#
+# Apply migrations:
+#   docker compose exec app alembic upgrade head
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL 16 + pgvector ──────────────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: intelligence_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Ollama — local LLM inference ─────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    # Pull the required models on first start
+    # Remove this block if you have already pulled the models locally.
+    entrypoint: >
+      /bin/sh -c "
+        ollama serve &
+        sleep 5 &&
+        ollama pull llama3.2 &&
+        ollama pull nomic-embed-text &&
+        wait
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ── Intelligence Briefing API ─────────────────────────────────────────────
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      # Override defaults — all values can also be in a .env file
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/intelligence_db
+      OLLAMA_BASE_URL: http://ollama:11434
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      # Set API_KEY to a non-empty string to enable authentication:
+      # API_KEY: your-secret-key-here
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for live reload during development:
+      - .:/app
+    command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+
+volumes:
+  postgres_data:
+  ollama_models:

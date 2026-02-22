@@ -1,6 +1,6 @@
 # Intelligence Briefing
 
-A self-hosted, AI-powered daily news briefing system. It ingests articles from 25 curated RSS feeds, semantically clusters them into stories, generates structured deep-knowledge analysis via a local LLM, personalises the ordering to your reading habits, and delivers a daily HTML newsletter to your inbox.
+A self-hosted, AI-powered daily news briefing system. It ingests articles from 37 curated RSS feeds across 11 domains, semantically clusters them into stories, generates structured deep-knowledge analysis via a local LLM, personalises the ordering to your reading habits, and delivers a daily HTML newsletter to your inbox.
 
 Everything runs locally — no external AI APIs, no cloud dependency.
 
@@ -48,6 +48,7 @@ NewsLetterScrapper/
 │   └── personalization/    Reading profile, story reordering
 ├── scripts/
 │   ├── run_pipeline.py     Daily pipeline orchestrator (run this)
+│   ├── send_newsletter.py  Resend a newsletter without re-running the pipeline
 │   ├── init_db.py          Create DB tables
 │   ├── explore_db.py       Read-only DB browser (CLI)
 │   └── crud_db.py          Full CRUD CLI tool
@@ -181,16 +182,19 @@ The system tracks your reading behaviour through the newsletter's client-side Ja
 
 ## News sources
 
-25 curated sources across 7 domains, configured in `services/ingestion/sources.yaml`:
+37 curated sources across 11 domains, configured in `services/ingestion/sources.yaml`:
 
 | Domain | Sources |
 |---|---|
-| World | Reuters, AP, BBC, Al Jazeera, The Guardian, Foreign Affairs |
-| Technology | Ars Technica, The Verge, MIT Tech Review, Wired, Hacker News |
-| Science | Nature News, New Scientist, Science Daily |
+| World | Reuters, AP, BBC News, Al Jazeera, The Guardian, Foreign Affairs |
+| India | The Hindu, Indian Express, Hindustan Times, NDTV, Times of India |
+| Policy | Politico, Brookings |
 | Economy | Financial Times, The Economist, Bloomberg Markets |
 | AI | DeepMind Blog, The Batch (deeplearning.ai) |
-| Policy | Politico, Brookings |
+| Technology | Ars Technica, The Verge, MIT Tech Review, Wired, Hacker News |
+| Science | Nature News, New Scientist, Science Daily |
 | Health | STAT News, WHO News |
+| Sport | BBC Sport, ESPN, Sky Sports, The Athletic, Yahoo Sports |
+| Entertainment | BBC Entertainment, Variety, Hollywood Reporter, Deadline, IGN |
 
-Add or remove sources by editing `sources.yaml` — no code changes needed.
+Newsletters are rendered in the order above — all stories from the same domain appear together before the next section begins. Add or remove sources by editing `sources.yaml` — no code changes needed.

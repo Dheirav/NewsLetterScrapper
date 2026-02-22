@@ -2,7 +2,7 @@
 
 ## Newsletter
 
-- [ ] **Homogeneous section ordering** — group stories by domain so all World news appears together, all Business/Economy together, all Technology together, etc. Currently stories are ordered by user engagement score (adapter.py) which mixes domains. The renderer or assembler should sort/group by domain after personalisation ranking is applied.
+- [x] **Homogeneous section ordering** — stories are now sorted by domain in `assembler.py` using `SECTION_ORDER` from `_domains.py` (World → AI → Technology → Economy → Science → Policy → Health). Engagement ranking from `adapter.py` is preserved within each section.
 
 ## Sources
 
@@ -41,4 +41,4 @@
 
 ## Performance
 
-- [ ] **Cache `sources.yaml` in `reliability.py`** — `_load_source_tiers()` reads and parses `sources.yaml` from disk on every cluster assessment. The result should be cached at module level (e.g. with `functools.lru_cache`) so the file is only read once per pipeline run.
+- [x] **Cache `sources.yaml` in `reliability.py`** — already implemented via a module-level `_SOURCE_TIERS_CACHE` global in `reliability.py`. The file is only read once per process.

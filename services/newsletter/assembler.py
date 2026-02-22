@@ -13,28 +13,38 @@ from datetime import date
 from typing import List
 
 from core.schemas.models import KnowledgeStory, Newsletter
-from services.newsletter._domains import infer_domain
+from services.newsletter._domains import infer_domain, SECTION_ORDER
 
 log = logging.getLogger(__name__)
+
+# Map each domain name to its display order index for fast lookup
+_DOMAIN_RANK = {domain: i for i, domain in enumerate(SECTION_ORDER)}
 
 
 def assemble(stories: List[KnowledgeStory], target_date: date) -> Newsletter:
     """
     Assemble adapted stories into a Newsletter.
-    Domain grouping for the template is handled by renderer.py via the
-    shared `infer_domain` helper — no need to duplicate it here.
-    html_content is populated later by renderer.py.
+    Stories are grouped by domain so all World stories appear together,
+    all Technology stories together, etc., following SECTION_ORDER.
+    Within each domain, the adapter's engagement ranking is preserved.
     """
-    # Count unique domains for the log line
-    domains = {infer_domain(s.topic_label) for s in stories}
+    # Stable sort: primary key = domain order, secondary key = original position
+    # (preserves adapter engagement ranking within each section)
+    sorted_stories = sorted(
+        stories,
+        key=lambda s: _DOMAIN_RANK.get(infer_domain(s.topic_label), len(SECTION_ORDER)),
+    )
+
+    domains = {infer_domain(s.topic_label) for s in sorted_stories}
     log.info(
         "Assembled newsletter for %s: %d stories across %d sections",
         target_date,
-        len(stories),
+        len(sorted_stories),
         len(domains),
     )
 
     return Newsletter(
         date=target_date,
-        stories=stories,
+        stories=sorted_stories,
     )
+

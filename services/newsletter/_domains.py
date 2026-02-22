@@ -7,7 +7,7 @@ Used by both assembler.py (for logging) and renderer.py (for Jinja2 filter).
 from typing import Dict, List
 
 # SECTION_ORDER controls the sequence of sections in the rendered newsletter.
-SECTION_ORDER = ["World", "AI", "Technology", "Economy", "Science", "Policy", "Health", "Other"]
+SECTION_ORDER = ["World", "India", "Policy", "Economy", "AI", "Technology", "Science", "Health", "Sport", "Entertainment", "Other"]
 
 # Keyword lists for domain inference from topic_label text.
 # Precedence: first match wins, in dict iteration order.
@@ -41,6 +41,23 @@ DOMAIN_KEYWORDS: Dict[str, List[str]] = {
         "election", "law", "policy", "court", "government", "congress",
         "parliament", "regulation", "vote", "democracy", "rights",
         "sanction", "treaty", "legislation", "senate", "constitution",
+    ],
+    "India": [
+        "india", "indian", "modi", "delhi", "mumbai", "bangalore", "chennai",
+        "kolkata", "hyderabad", "bjp", "congress party", "lok sabha",
+        "rajya sabha", "rupee", "bse", "nse", "sensex", "nifty",
+    ],
+    "Sport": [
+        "sport", "football", "soccer", "basketball", "tennis", "cricket",
+        "rugby", "golf", "athletics", "olympic", "nfl", "nba", "nhl", "mlb",
+        "premier league", "champions league", "formula 1", "f1", "transfer",
+        "match", "tournament", "championship", "league", "athlete",
+    ],
+    "Entertainment": [
+        "film", "movie", "cinema", "tv", "television", "streaming", "netflix",
+        "disney", "hbo", "music", "album", "concert", "award", "oscar",
+        "grammy", "emmy", "bafta", "celebrity", "actor", "director",
+        "game", "gaming", "playstation", "xbox", "nintendo", "box office",
     ],
     "World": [],  # catch-all — must be last
 }

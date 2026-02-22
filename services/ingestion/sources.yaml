@@ -128,3 +128,81 @@ sources:
     url: "https://www.who.int/rss-feeds/news-english.xml"
     domain: "Health"
     tier: 1
+
+  # ── Sport ─────────────────────────────────────────────────────────────────
+  - name: "BBC Sport"
+    url: "https://feeds.bbci.co.uk/sport/rss.xml"
+    domain: "Sport"
+    tier: 1
+
+  - name: "ESPN Top Headlines"
+    url: "https://www.espn.com/espn/rss/news"
+    domain: "Sport"
+    tier: 1
+
+  - name: "Sky Sports"
+    url: "https://www.skysports.com/rss/12040"
+    domain: "Sport"
+    tier: 2
+
+  - name: "The Athletic"
+    url: "https://www.nytimes.com/athletic/rss/"
+    domain: "Sport"
+    tier: 1
+
+  - name: "Yahoo Sports"
+    url: "https://sports.yahoo.com/rss/"
+    domain: "Sport"
+    tier: 2
+
+ # ── Entertainment ─────────────────────────────────────────────────────────
+  - name: "BBC Entertainment & Arts"
+    url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
+    domain: "Entertainment"
+    tier: 1
+
+  - name: "Variety"
+    url: "https://variety.com/feed/"
+    domain: "Entertainment"
+    tier: 1
+
+  - name: "Hollywood Reporter"
+    url: "https://www.hollywoodreporter.com/feed/"
+    domain: "Entertainment"
+    tier: 1
+
+  - name: "Deadline"
+    url: "https://deadline.com/feed/"
+    domain: "Entertainment"
+    tier: 2
+
+  - name: "IGN"
+    url: "https://www.ign.com/rss/articles/feed"
+    domain: "Entertainment"
+    tier: 2
+
+  # ── India Regional ────────────────────────────────────────────────────────
+  - name: "The Hindu"
+    url: "https://www.thehindu.com/news/national/feeder/default.rss"
+    domain: "India"
+    tier: 1
+
+  - name: "Indian Express"
+    url: "https://indianexpress.com/section/india/feed/"
+    domain: "India"
+    tier: 1
+
+  - name: "Hindustan Times India"
+    url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml"
+    domain: "India"
+    tier: 2
+
+  - name: "NDTV India"
+    url: "https://feeds.feedburner.com/ndtvnews-india-news"
+    domain: "India"
+    tier: 2
+
+  - name: "Times of India India"
+    url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"
+    domain: "India"
+    tier: 2

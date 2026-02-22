@@ -237,11 +237,26 @@ Edit `services/ingestion/sources.yaml` to add or remove RSS feeds:
 sources:
   - name: "My Source"
     url: "https://example.com/feed.xml"
-    domain: "technology"   # world | technology | science | economy | ai | policy | health
+    domain: "Technology"   # see valid domains below
     tier: 2                # 1 = elite, 2 = good, 3 = general
 ```
 
-No code changes or restarts needed — the file is read each pipeline run.
+Valid domains and their newsletter section order:
+
+| # | Domain | Example sources |
+|---|---|---|
+| 1 | `World` | Reuters, BBC, Al Jazeera |
+| 2 | `India` | The Hindu, NDTV, Times of India |
+| 3 | `Policy` | Politico, Brookings |
+| 4 | `Economy` | FT, Bloomberg, The Economist |
+| 5 | `AI` | DeepMind Blog, The Batch |
+| 6 | `Technology` | Ars Technica, Wired, The Verge |
+| 7 | `Science` | Nature, New Scientist |
+| 8 | `Health` | WHO News, STAT News |
+| 9 | `Sport` | BBC Sport, ESPN, Sky Sports |
+| 10 | `Entertainment` | Variety, Hollywood Reporter, IGN |
+
+Stories from the same domain are grouped together in the newsletter. No code changes or restarts needed — the file is read each pipeline run.
 
 ---
 

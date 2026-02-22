@@ -30,8 +30,26 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=587)
     smtp_user: str = Field(default="")
     smtp_password: str = Field(default="")
+    # Single recipient (kept for backward compatibility)
     recipient_email: str = Field(default="")
+    # Multiple recipients — comma-separated string in .env:
+    #   RECIPIENT_EMAILS=alice@example.com,bob@example.com
+    recipient_emails: str = Field(default="")
     email_from_name: str = Field(default="Intelligence Briefing")
+
+    @property
+    def all_recipients(self) -> List[str]:
+        """Merged, deduplicated list of every configured recipient."""
+        seen: set[str] = set()
+        result: List[str] = []
+        for addr in (
+            [a.strip() for a in self.recipient_emails.split(",") if a.strip()]
+            + ([self.recipient_email] if self.recipient_email.strip() else [])
+        ):
+            if addr not in seen:
+                seen.add(addr)
+                result.append(addr)
+        return result
 
     # ── App behaviour ─────────────────────────────────────────────────────────
     app_env: str = Field(default="development")
@@ -95,8 +113,8 @@ class Settings(BaseSettings):
         """
         if self.app_env == "production":
             missing = []
-            if not self.recipient_email:
-                missing.append("RECIPIENT_EMAIL")
+            if not self.all_recipients:
+                missing.append("RECIPIENT_EMAIL or RECIPIENT_EMAILS")
             if not self.smtp_password:
                 missing.append("SMTP_PASSWORD")
             if not self.smtp_user:

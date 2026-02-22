@@ -20,6 +20,7 @@ build/
 *.egg-info/
 *.egg
 .eggs/
+newsletter_scrapper.egg-info/
 
 # Database
 *.db

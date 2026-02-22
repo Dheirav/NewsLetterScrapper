@@ -18,11 +18,11 @@ Step-by-step instructions to get the Intelligence Briefing system running from s
 ## 1. Clone and create a virtual environment
 
 ```bash
-git clone <your-repo-url> NewsLetterScrapper
+git clone https://github.com/Dheirav/NewsLetterScrapper.git NewsLetterScrapper
 cd NewsLetterScrapper
 
-python3 -m venv .venv
-source .venv/bin/activate        # on Windows: .venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate        # on Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
@@ -123,8 +123,9 @@ OLLAMA_EMBED_MODEL=nomic-embed-text
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=you@gmail.com
-SMTP_PASSWORD=your_app_password   # Gmail: Settings → Security → App Passwords
-RECIPIENT_EMAIL=you@gmail.com
+SMTP_PASSWORD=your_app_password       # Gmail: Settings → Security → App Passwords
+RECIPIENT_EMAIL=you@gmail.com         # single recipient
+# RECIPIENT_EMAILS=you@gmail.com,friend@example.com  # multiple recipients (comma-separated)
 EMAIL_FROM_NAME=Intelligence Briefing
 
 # ── App ────────────────────────────────────────────────────────────────────────
@@ -192,7 +193,25 @@ python3 scripts/explore_db.py
 
 ---
 
-## 8. Automate with cron (optional)
+## 8. Sending the newsletter manually
+
+If you want to resend an already-generated newsletter without re-running the full pipeline:
+
+```bash
+# Send today's newsletter to all configured recipients
+python3 scripts/send_newsletter.py
+
+# Send a specific date
+python3 scripts/send_newsletter.py --date 2026-02-21
+
+# Override recipients (useful for testing)
+python3 scripts/send_newsletter.py --to you@example.com
+python3 scripts/send_newsletter.py --to you@example.com --to colleague@example.com
+```
+
+---
+
+## 9. Automate with cron (optional)
 
 Run the pipeline every morning at 6 AM:
 
@@ -203,7 +222,7 @@ crontab -e
 Add:
 
 ```cron
-0 6 * * * cd /path/to/NewsLetterScrapper && /path/to/.venv/bin/python3 scripts/run_pipeline.py >> /var/log/briefing.log 2>&1
+0 6 * * * cd /path/to/NewsLetterScrapper && /path/to/venv/bin/python3 scripts/run_pipeline.py >> /var/log/briefing.log 2>&1
 ```
 
 Find your Python path with `which python3` (inside the venv).
@@ -274,9 +293,12 @@ This means Ollama is running on CPU, which is fine — just slower. To enable GP
 
 ### Email not sending
 
-- Confirm `SMTP_USER`, `SMTP_PASSWORD`, and `RECIPIENT_EMAIL` are set in `.env`
-- For Gmail, use an **App Password** not your account password
+- Confirm `SMTP_USER`, `SMTP_PASSWORD`, and at least one of `RECIPIENT_EMAIL` / `RECIPIENT_EMAILS` are set in `.env`
+- For Gmail, use an **App Password** (Google Account → Security → 2-Step Verification → App Passwords), not your regular password
+- To send to multiple recipients, use `RECIPIENT_EMAILS=a@example.com,b@example.com` — each person receives their own individual email and cannot see other recipients
 - The pipeline completes successfully even if email fails — the newsletter is still saved to the DB and viewable at `/api/newsletter/today`
+- To resend without re-running the full pipeline: `python3 scripts/send_newsletter.py`
+- To send to a specific address for testing: `python3 scripts/send_newsletter.py --to you@example.com`
 
 ### `No new articles today`
 
@@ -296,7 +318,8 @@ This is normal if the pipeline already ran today — deduplication filters out a
 | `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
 | `SMTP_USER` | _(empty)_ | SMTP login username |
 | `SMTP_PASSWORD` | _(empty)_ | SMTP login password / app password |
-| `RECIPIENT_EMAIL` | _(empty)_ | Where to send the newsletter |
+| `RECIPIENT_EMAIL` | _(empty)_ | Single recipient address (backward-compatible) |
+| `RECIPIENT_EMAILS` | _(empty)_ | Comma-separated list of recipients — merged with `RECIPIENT_EMAIL`; each gets their own individual email |
 | `EMAIL_FROM_NAME` | `Intelligence Briefing` | Display name in email "From" header |
 | `APP_ENV` | `development` | Set to `production` to disable SQL echo |
 | `LOG_LEVEL` | `INFO` | Python logging level |

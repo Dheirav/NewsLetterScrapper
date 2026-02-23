@@ -82,7 +82,43 @@
     line-height: 1.3;
     letter-spacing: -0.01em;
     margin-bottom: 1rem;
+    cursor: pointer;
   }
+  .story h2:hover { color: #444; }
+
+  /* ── Expand / collapse ───────────────────────────────────────────────── */
+  .story-details {
+    margin-top: 0.5rem;
+  }
+  .story-details summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #999;
+    padding: 0.55rem 0;
+    border-top: 1px dotted #e0ddd8;
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .story-details summary::-webkit-details-marker { display: none; }
+  .story-details summary::marker { display: none; }
+  .story-details summary:hover { color: #555; }
+  .story-details .chev {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-style: normal;
+    line-height: 1;
+  }
+  .story-details[open] > summary { color: #555; margin-bottom: 1rem; }
+  .story-details[open] > summary .chev { transform: rotate(180deg); }
 
   /* ── Knowledge sections ───────────────────────────────────────────── */
   .knowledge-section { margin-bottom: 1.25rem; }
@@ -194,64 +230,71 @@
     data-story-index="{{ loop.index0 }}"
   >
     <div class="story-label">{{ domain }} · {{ story.source_count }} source{{ 's' if story.source_count != 1 }}</div>
-    <h2>{{ story.topic_label }}</h2>
+    <!-- Headline — clicking it toggles the details block below -->
+    <h2 onclick="this.closest('.story').querySelector('.story-details').toggleAttribute('open')">{{ story.topic_label }}</h2>
 
-    <!-- Executive Summary -->
+    <!-- Executive Summary — always visible -->
     <div class="knowledge-section" data-section="executive_summary">
       <div class="kh">Executive Summary</div>
       <p>{{ story.executive_summary }}</p>
     </div>
 
-    <!-- Context -->
-    <div class="knowledge-section" data-section="context">
-      <div class="kh">Context</div>
-      <p>{{ story.context }}</p>
-    </div>
+    <!-- Deep-dive — collapsed by default, tap headline or toggle to expand -->
+    <details class="story-details">
+      <summary><span class="chev">▾</span>&nbsp;Deep dive</summary>
 
-    <!-- Why It Matters -->
-    <div class="knowledge-section" data-section="why_it_matters">
-      <div class="kh">Why It Matters</div>
-      <p>{{ story.why_it_matters }}</p>
-    </div>
+      <!-- Context -->
+      <div class="knowledge-section" data-section="context">
+        <div class="kh">Context</div>
+        <p>{{ story.context }}</p>
+      </div>
 
-    <!-- Implications -->
-    <div class="knowledge-section" data-section="implications">
-      <div class="kh">Implications</div>
-      <p>{{ story.implications }}</p>
-    </div>
+      <!-- Why It Matters -->
+      <div class="knowledge-section" data-section="why_it_matters">
+        <div class="kh">Why It Matters</div>
+        <p>{{ story.why_it_matters }}</p>
+      </div>
 
-    <!-- Talking Points -->
-    {% if story.talking_points %}
-    <div class="knowledge-section" data-section="talking_points">
-      <div class="kh">Talking Points</div>
-      <ul class="talking-points-list">
-        {% for point in story.talking_points %}
-        <li>{{ point }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
+      <!-- Implications -->
+      <div class="knowledge-section" data-section="implications">
+        <div class="kh">Implications</div>
+        <p>{{ story.implications }}</p>
+      </div>
 
-    <!-- Reliability -->
-    {% if story.reliability_notes %}
-    <div class="reliability">
-      <div class="rel-label">Source Reliability</div>
-      {{ story.reliability_notes }}
-    </div>
-    {% endif %}
-
-    <!-- Article links -->
-    {% if story.article_urls %}
-    <div class="sources-row">
-      Sources:
-      {% for url, src in zip(story.article_urls[:5], story.article_sources[:5]) %}
-        <a href="{{ url }}" target="_blank" rel="noopener">{{ src }}</a>{% if not loop.last %} · {% endif %}
-      {% endfor %}
-      {% if story.article_urls|length > 5 %}
-        · <span style="color:#ccc">+{{ story.article_urls|length - 5 }} more</span>
+      <!-- Talking Points -->
+      {% if story.talking_points %}
+      <div class="knowledge-section" data-section="talking_points">
+        <div class="kh">Talking Points</div>
+        <ul class="talking-points-list">
+          {% for point in story.talking_points %}
+          <li>{{ point }}</li>
+          {% endfor %}
+        </ul>
+      </div>
       {% endif %}
-    </div>
-    {% endif %}
+
+      <!-- Reliability -->
+      {% if story.reliability_notes %}
+      <div class="reliability">
+        <div class="rel-label">Source Reliability</div>
+        {{ story.reliability_notes }}
+      </div>
+      {% endif %}
+
+      <!-- Article links -->
+      {% if story.article_urls %}
+      <div class="sources-row">
+        Sources:
+        {% for url, src in zip(story.article_urls[:5], story.article_sources[:5]) %}
+          <a href="{{ url }}" target="_blank" rel="noopener">{{ src }}</a>{% if not loop.last %} · {% endif %}
+        {% endfor %}
+        {% if story.article_urls|length > 5 %}
+          · <span style="color:#ccc">+{{ story.article_urls|length - 5 }} more</span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </details>
   </article>
 {% endfor %}
 

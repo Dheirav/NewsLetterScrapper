@@ -4,6 +4,10 @@
 
 - [x] **Homogeneous section ordering** — stories are now sorted by domain in `assembler.py` using `SECTION_ORDER` from `_domains.py` (World → AI → Technology → Economy → Science → Policy → Health). Engagement ranking from `adapter.py` is preserved within each section.
 
+- [x] **Increase stories per newsletter to 30** — added `MAX_KNOWLEDGE_CLUSTERS=30` to `.env`, overriding the default of 20. Takes effect on the next pipeline run.
+
+- [x] **Collapsible story cards** — reworked `templates/newsletter.html` so each story shows only the headline and executive summary by default. Tapping the headline or the "▾ Deep dive" toggle expands Context, Why It Matters, Implications, Talking Points, and Sources. Uses native `<details>`/`<summary>` — no extra JS. Reading tracker unaffected.
+
 ## Sources
 
 - [ ] **Add source metadata for ranking and balancing**
@@ -42,3 +46,7 @@
 ## Performance
 
 - [x] **Cache `sources.yaml` in `reliability.py`** — already implemented via a module-level `_SOURCE_TIERS_CACHE` global in `reliability.py`. The file is only read once per process.
+
+## Tooling
+
+- [x] **Disk usage report** — added `scripts/disk_usage.py`. Reports a breakdown of disk consumption across three buckets: Code (Python, templates, configs), Models (Ollama, via API + `~/.ollama` disk scan), and Data (PostgreSQL per-table sizes). Includes a colour-coded proportional bar chart and grand total. Supports `--json` output flag.

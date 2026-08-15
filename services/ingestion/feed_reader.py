@@ -57,6 +57,8 @@ def _fetch_feed(source: dict) -> List[Article]:
                     url=url,
                     published_at=_parse_date(entry),
                     content=content,
+                    source_type=source.get("source_type", "news"),
+                    source_weight=float(source.get("weight", 1.0)),
                 )
             )
         log.debug("Feed %s → %d articles", source["name"], len(articles))

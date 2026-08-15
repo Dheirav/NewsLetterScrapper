@@ -27,6 +27,11 @@ Usage
   python scripts/crud_db.py newsletters list
   python scripts/crud_db.py newsletters get <id>
   python scripts/crud_db.py newsletters delete <id>
+
+  # Unsubscribes
+  python scripts/crud_db.py unsubscribes list
+  python scripts/crud_db.py unsubscribes add email@example.com
+  python scripts/crud_db.py unsubscribes remove email@example.com
 """
 import argparse
 import asyncio
@@ -53,6 +58,7 @@ from core.db.orm_models import (
     KnowledgeStoryORM,
     NewsletterORM,
     StoryClusterORM,
+    UnsubscribeORM,
 )
 from core.db.session import get_session
 
@@ -346,6 +352,50 @@ async def newsletters_delete(args):
 
 
 # ═══════════════════════════════════════════════════════
+# UNSUBSCRIBES
+# ═══════════════════════════════════════════════════════
+
+async def unsubscribes_list(args):
+    async with get_session() as session:
+        res = await session.execute(
+            select(UnsubscribeORM).order_by(UnsubscribeORM.opted_out_at.desc())
+        )
+        rows = res.scalars().all()
+    if not rows:
+        print("\n  No opted-out addresses.\n")
+        return
+    print(f"\n  {'EMAIL':<40} OPTED OUT AT")
+    print(SEP)
+    for r in rows:
+        print(f"  {r.email:<40} {r.opted_out_at}")
+    print(f"\n  Total: {len(rows)} address(es)\n")
+
+
+async def unsubscribes_add(args):
+    from services.newsletter.unsubscribe import opt_out
+    async with get_session() as session:
+        added = await opt_out(args.email, session)
+    if added:
+        print(f"  Added {args.email} to the opt-out list.")
+    else:
+        print(f"  {args.email} was already opted out.")
+
+
+async def unsubscribes_remove(args):
+    """Re-subscribe: remove an address from the opt-out list."""
+    async with get_session() as session:
+        res = await session.execute(
+            select(UnsubscribeORM).where(UnsubscribeORM.email == args.email.lower().strip())
+        )
+        row = res.scalar_one_or_none()
+        if row is None:
+            print(f"  {args.email} is not in the opt-out list.")
+            return
+        await session.delete(row)
+    print(f"  Removed {args.email} from the opt-out list (re-subscribed).")
+
+
+# ═══════════════════════════════════════════════════════
 # CLI routing
 # ═══════════════════════════════════════════════════════
 
@@ -426,7 +476,16 @@ def main():
 
     np_del = np_sub.add_parser("delete")
     np_del.add_argument("id", type=int)
+    # ── unsubscribes ───────────────────────────────────────────────────────────
+    up_ = sub.add_parser("unsubscribes")
+    up_sub = up_.add_subparsers(dest="action", required=True)
+    up_sub.add_parser("list")
 
+    up_add = up_sub.add_parser("add")
+    up_add.add_argument("email", type=str)
+
+    up_rem = up_sub.add_parser("remove")
+    up_rem.add_argument("email", type=str)
     args = parser.parse_args()
 
     dispatch = {
@@ -442,9 +501,12 @@ def main():
         ("stories",      "get"):     stories_get,
         ("stories",      "update"):  stories_update,
         ("stories",      "delete"):  stories_delete,
-        ("newsletters",  "list"):    newsletters_list,
-        ("newsletters",  "get"):     newsletters_get,
-        ("newsletters",  "delete"):  newsletters_delete,
+        ("newsletters",    "list"):   newsletters_list,
+        ("newsletters",    "get"):    newsletters_get,
+        ("newsletters",    "delete"): newsletters_delete,
+        ("unsubscribes",   "list"):   unsubscribes_list,
+        ("unsubscribes",   "add"):    unsubscribes_add,
+        ("unsubscribes",   "remove"): unsubscribes_remove,
     }
 
     fn = dispatch.get((args.entity, args.action))

@@ -52,6 +52,8 @@ class ArticleORM(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     # 'ok' = full text scraped; 'low' = below MIN_CONTENT_LENGTH (paywall / JS)
     content_quality: Mapped[str] = mapped_column(String(10), nullable=False, server_default="ok")
+    source_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="news")
+    source_weight: Mapped[float] = mapped_column(Float, nullable=False, server_default="1.0")
     embedding: Mapped[Optional[list]] = mapped_column(
         Vector(settings.embedding_dim), nullable=True
     )
@@ -130,7 +132,8 @@ class NewsletterORM(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     newsletter_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
-    html_content: Mapped[str] = mapped_column(Text, nullable=False)
+    html_content: Mapped[str] = mapped_column(Text, nullable=False)                         # web version
+    email_html_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)          # email version
     sent: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -225,4 +228,22 @@ class FailedGenerationORM(Base):
     run_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unsubscribes  (email opt-outs)
+# ---------------------------------------------------------------------------
+
+class UnsubscribeORM(Base):
+    """One row per opted-out email address."""
+    __tablename__ = "unsubscribes"
+    __table_args__ = (
+        Index("ix_unsubscribes_email", "email", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    opted_out_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

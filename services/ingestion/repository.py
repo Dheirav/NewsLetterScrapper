@@ -41,6 +41,8 @@ async def save_articles(
             "published_at": a.published_at,
             "content": a.content,
             "content_quality": a.content_quality,
+            "source_type": a.source_type,
+            "source_weight": a.source_weight,
         }
         for a in articles
     ]

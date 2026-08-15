@@ -1,208 +1,287 @@
 # Curated RSS sources for the daily intelligence pipeline.
 #
-# tier: 1 = elite / premium reliability  2 = good  3 = general
-# domain: used to organise newsletter sections
+# tier:        1 = elite / premium reliability  2 = good  3 = general
+# domain:      used to organise newsletter sections
+# source_type: "news" | "analysis" | "research"
+# weight:      ranking influence score
+#              news t1=1.0, t2=0.9 | analysis t1=0.7, t2=0.6 | research t1=0.4, t2=0.3
 #
 # To add a new source, append an entry under the appropriate group.
 
 sources:
 
-  # ── World / Politics ─────────────────────────────────────────────────────
+  # -- World / Politics ------------------------------------------------------
   - name: "Reuters"
     url: "https://feeds.reuters.com/reuters/topNews"
     domain: "World"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Associated Press"
     url: "https://rsshub.app/apnews/topics/apf-topnews"
     domain: "World"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "BBC News"
     url: "https://feeds.bbci.co.uk/news/rss.xml"
     domain: "World"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Al Jazeera"
     url: "https://www.aljazeera.com/xml/rss/all.xml"
     domain: "World"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "The Guardian"
     url: "https://www.theguardian.com/world/rss"
     domain: "World"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "Foreign Affairs"
     url: "https://www.foreignaffairs.com/rss.xml"
     domain: "World"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
-  # ── Technology ────────────────────────────────────────────────────────────
+  # -- Technology ------------------------------------------------------------
   - name: "Ars Technica"
     url: "https://feeds.arstechnica.com/arstechnica/index"
     domain: "Technology"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
   - name: "The Verge"
     url: "https://www.theverge.com/rss/index.xml"
     domain: "Technology"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "MIT Technology Review"
     url: "https://www.technologyreview.com/feed/"
     domain: "Technology"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
   - name: "Wired"
     url: "https://www.wired.com/feed/rss"
     domain: "Technology"
     tier: 2
+    source_type: "analysis"
+    weight: 0.6
 
   - name: "Hacker News (top)"
     url: "https://hnrss.org/frontpage"
     domain: "Technology"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
-  # ── Science ───────────────────────────────────────────────────────────────
+  # -- Science ---------------------------------------------------------------
   - name: "Nature News"
     url: "https://www.nature.com/nature.rss"
     domain: "Science"
     tier: 1
+    source_type: "research"
+    weight: 0.4
 
   - name: "New Scientist"
     url: "https://www.newscientist.com/feed/home/"
     domain: "Science"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
   - name: "Science Daily"
     url: "https://www.sciencedaily.com/rss/all.xml"
     domain: "Science"
     tier: 2
+    source_type: "research"
+    weight: 0.3
 
-  # ── Economy / Finance ─────────────────────────────────────────────────────
+  # -- Economy / Finance -----------------------------------------------------
   - name: "Financial Times"
     url: "https://www.ft.com/rss/home"
     domain: "Economy"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "The Economist"
     url: "https://www.economist.com/latest/rss.xml"
     domain: "Economy"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
   - name: "Bloomberg Markets"
     url: "https://feeds.bloomberg.com/markets/news.rss"
     domain: "Economy"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
-  # ── AI & Machine Learning ────────────────────────────────────────────────
+  # -- AI & Machine Learning -------------------------------------------------
   - name: "DeepMind Blog"
     url: "https://deepmind.google/blog/rss.xml"
     domain: "AI"
     tier: 1
+    source_type: "research"
+    weight: 0.4
 
   - name: "The Batch (deeplearning.ai)"
     url: "https://www.deeplearning.ai/the-batch/feed/"
     domain: "AI"
     tier: 2
+    source_type: "analysis"
+    weight: 0.6
 
-  # ── Policy & Society ──────────────────────────────────────────────────────
+  # -- Policy & Society ------------------------------------------------------
   - name: "Politico"
     url: "https://rss.politico.com/politics-news.xml"
     domain: "Policy"
     tier: 2
+    source_type: "analysis"
+    weight: 0.6
 
   - name: "Brookings"
     url: "https://www.brookings.edu/feed/"
     domain: "Policy"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
-  # ── Health ────────────────────────────────────────────────────────────────
+  # -- Health ----------------------------------------------------------------
   - name: "STAT News"
     url: "https://www.statnews.com/feed/"
     domain: "Health"
     tier: 2
+    source_type: "analysis"
+    weight: 0.6
 
   - name: "WHO News"
     url: "https://www.who.int/rss-feeds/news-english.xml"
     domain: "Health"
     tier: 1
+    source_type: "research"
+    weight: 0.4
 
-  # ── Sport ─────────────────────────────────────────────────────────────────
+  # -- Sport -----------------------------------------------------------------
   - name: "BBC Sport"
     url: "https://feeds.bbci.co.uk/sport/rss.xml"
     domain: "Sport"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "ESPN Top Headlines"
     url: "https://www.espn.com/espn/rss/news"
     domain: "Sport"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Sky Sports"
     url: "https://www.skysports.com/rss/12040"
     domain: "Sport"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "The Athletic"
     url: "https://www.nytimes.com/athletic/rss/"
     domain: "Sport"
     tier: 1
+    source_type: "analysis"
+    weight: 0.7
 
   - name: "Yahoo Sports"
     url: "https://sports.yahoo.com/rss/"
     domain: "Sport"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
- # ── Entertainment ─────────────────────────────────────────────────────────
+  # -- Entertainment ---------------------------------------------------------
   - name: "BBC Entertainment & Arts"
     url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
     domain: "Entertainment"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Variety"
     url: "https://variety.com/feed/"
     domain: "Entertainment"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Hollywood Reporter"
     url: "https://www.hollywoodreporter.com/feed/"
     domain: "Entertainment"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Deadline"
     url: "https://deadline.com/feed/"
     domain: "Entertainment"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "IGN"
     url: "https://www.ign.com/rss/articles/feed"
     domain: "Entertainment"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
-  # ── India Regional ────────────────────────────────────────────────────────
+  # -- India Regional --------------------------------------------------------
   - name: "The Hindu"
     url: "https://www.thehindu.com/news/national/feeder/default.rss"
     domain: "India"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Indian Express"
     url: "https://indianexpress.com/section/india/feed/"
     domain: "India"
     tier: 1
+    source_type: "news"
+    weight: 1.0
 
   - name: "Hindustan Times India"
     url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml"
     domain: "India"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "NDTV India"
     url: "https://feeds.feedburner.com/ndtvnews-india-news"
     domain: "India"
     tier: 2
+    source_type: "news"
+    weight: 0.9
 
   - name: "Times of India India"
     url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"
     domain: "India"
     tier: 2
+    source_type: "news"
+    weight: 0.9

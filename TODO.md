@@ -1,16 +1,30 @@
 # TODO
 
-## Newsletter
+## Hosting
 
-- [x] **Homogeneous section ordering** — stories are now sorted by domain in `assembler.py` using `SECTION_ORDER` from `_domains.py` (World → AI → Technology → Economy → Science → Policy → Health). Engagement ranking from `adapter.py` is preserved within each section.
+- [ ] **Migrate Postgres to Supabase** — create a free project at [supabase.com](https://supabase.com), enable the `vector` extension, then point `DATABASE_URL` at the Supabase connection string. Run `alembic upgrade head` once from the local machine to initialise the schema. Update `.env` on both the local pipeline machine and the Fly.io deployment.
 
-- [x] **Increase stories per newsletter to 30** — added `MAX_KNOWLEDGE_CLUSTERS=30` to `.env`, overriding the default of 20. Takes effect on the next pipeline run.
+- [ ] **Deploy API server to Fly.io** — install the `fly` CLI, run `fly launch` from the project root (Dockerfile is already production-ready, say NO to Fly's managed Postgres). Set secrets via `fly secrets set` (see below). Keep `min_machines_running = 1` in `fly.toml` so the server never sleeps.
 
-- [x] **Collapsible story cards** — reworked `templates/newsletter.html` so each story shows only the headline and executive summary by default. Tapping the headline or the "▾ Deep dive" toggle expands Context, Why It Matters, Implications, Talking Points, and Sources. Uses native `<details>`/`<summary>` — no extra JS. Reading tracker unaffected.
+  **Secrets to set on Fly:**
+  ```
+  DATABASE_URL      — Supabase connection string
+  APP_ENV           — production
+  PUBLIC_URL        — https://<app>.fly.dev
+  SMTP_USER         — denewsletter2005@gmail.com
+  SMTP_PASSWORD     — Gmail app password
+  RECIPIENT_EMAILS  — comma-separated recipients
+  UNSUBSCRIBE_SECRET — long random string
+  API_KEY           — long random string (locks down the API)
+  ```
+
+- [ ] **Update local `.env` for split deployment** — set `DATABASE_URL` to the Supabase URL and `PUBLIC_URL` to the Fly.io URL so unsubscribe links and "Read online" links in emails point to the live server.
+
+- [ ] **Remove `--reload` from production start command** — `fly.toml` / `Dockerfile` CMD should use `uvicorn apps.api.main:app --host 0.0.0.0 --port 8000` (no `--reload`).
 
 ## Sources
 
-- [ ] **Add source metadata for ranking and balancing**
+- [x] **Add source metadata for ranking and balancing**
 
   ### Goal
   Upgrade `sources.yaml` so the pipeline can distinguish between general news, analysis, and research sources, and control their influence during story ranking.
@@ -39,14 +53,14 @@
   - Future story ranking can use source weights.
   - Newsletter remains general-purpose while research sources act as supporting context.
 
-## Email
+## Database Maintenance
 
-- [ ] **Unsubscribe / opt-out mechanism** — there is currently no way for a recipient in `RECIPIENT_EMAILS` to remove themselves. Add an unsubscribe flow: include a one-click unsubscribe link in each email that marks the address as opted-out in the DB, and skip opted-out addresses in `send_email()`.
+- [ ] **Delete unclustered articles** — `archive.py` only deletes articles belonging to old clusters (`cluster_id IN (...)`). Articles that never clustered (`cluster_id = NULL`) — paywall failures, singletons below `min_cluster_articles` — accumulate indefinitely. Add a second delete pass: `DELETE FROM articles WHERE cluster_id IS NULL AND created_at < cutoff`.
 
-## Performance
+- [ ] **VACUUM ANALYZE after archive** — PostgreSQL marks deleted rows as dead tuples but doesn't reclaim disk until `VACUUM` runs. Add `VACUUM ANALYZE articles, story_clusters, knowledge_stories` at the end of `archive.py` using a raw `asyncpg` connection (requires `AUTOCOMMIT` isolation — cannot run inside a transaction).
 
-- [x] **Cache `sources.yaml` in `reliability.py`** — already implemented via a module-level `_SOURCE_TIERS_CACHE` global in `reliability.py`. The file is only read once per process.
+- [ ] **Strip old newsletter HTML** — `newsletters` table grows ~150 KB/day (full rendered HTML) and is never touched by the archive. For newsletters older than `ARCHIVE_KEEP_DAYS`, null out `html_content` while keeping the metadata row. The newsletter can be re-rendered on demand via `send_newsletter.py` if ever needed.
 
-## Tooling
+- [ ] **Schedule archive in cron installer** — `install_cron.sh` only schedules `run_pipeline.py`. Add a second weekly cron entry (e.g. Sunday 03:00) that runs `scripts/archive.py` automatically. Controlled by `ARCHIVE_KEEP_DAYS` in `.env` (default 90).
 
-- [x] **Disk usage report** — added `scripts/disk_usage.py`. Reports a breakdown of disk consumption across three buckets: Code (Python, templates, configs), Models (Ollama, via API + `~/.ollama` disk scan), and Data (PostgreSQL per-table sizes). Includes a colour-coded proportional bar chart and grand total. Supports `--json` output flag.
+- [ ] **Tiered retention** — add two separate config keys: `ARCHIVE_KEEP_ARTICLES_DAYS` (default 90, controls raw text + embeddings) and `ARCHIVE_KEEP_STORIES_DAYS` (default 365, controls knowledge stories + newsletter metadata). This keeps useful long-term history without paying the storage cost of embeddings.

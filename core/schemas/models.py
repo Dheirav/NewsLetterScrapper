@@ -36,6 +36,9 @@ class Article:
     embedding: Optional[List[float]] = None   # 768-dim vector (nomic-embed-text)
     # 'ok' = full text scraped; 'low' = paywalled / JS-rendered / near-empty
     content_quality: str = "ok"
+    # Source metadata for ranking
+    source_type: str = "news"        # "news" | "analysis" | "research"
+    source_weight: float = 1.0       # ranking influence score
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +83,8 @@ class Newsletter:
     """The daily assembled intelligence briefing."""
     date: date
     stories: List[KnowledgeStory]
-    html_content: str = ""
+    html_content: str = ""          # web version (with JS reading tracker)
+    email_html_content: str = ""   # email version (no JS, fully expanded)
     id: Optional[int] = None
     sent_at: Optional[datetime] = None
 

@@ -13,6 +13,7 @@ Routes served at /api/graph/:
   /stories/*    -> routers/stories.py
 """
 import logging
+from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
@@ -54,6 +55,8 @@ async def graph_ui() -> FileResponse:
 @router.get("/data", summary="Nodes and edges for the knowledge graph")
 async def graph_data(
     days: int = Query(7, ge=1, le=90, description="How many past days to include"),
+    include_articles: bool = Query(False, description="Include article nodes (can be slow for large datasets)"),
+    max_per_cluster: int = Query(5, ge=1, le=20, description="Max article nodes per cluster when include_articles=true"),
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     """
@@ -62,6 +65,9 @@ async def graph_data(
 
     Node types: article | cluster | story | newsletter
     Edge types: member (article->cluster) | knowledge (cluster->story)
+
+    Articles are excluded by default (include_articles=false) to keep the graph
+    performant. Enable them only for small date ranges or low cluster counts.
     """
     since = date.today() - timedelta(days=days)
     nodes: List[Dict[str, Any]] = []
@@ -83,27 +89,33 @@ async def graph_data(
             },
         })
 
-    if cluster_ids:
+    if cluster_ids and include_articles:
         articles_res = await db.execute(
             select(ArticleORM).where(ArticleORM.cluster_id.in_(cluster_ids))
         )
+        # Cap articles per cluster to keep node count manageable
+        by_cluster: Dict[str, list] = defaultdict(list)
         for a in articles_res.scalars().all():
-            nodes.append({
-                "id": f"article_{a.id}", "type": "article", "label": a.title[:60],
-                "data": {
-                    "id": a.id, "title": a.title, "source": a.source, "url": a.url,
-                    "published_at": str(a.published_at) if a.published_at else None,
-                    "cluster_id": a.cluster_id,
-                    "content_quality": a.content_quality,
-                },
-            })
-            if a.cluster_id:
+            if len(by_cluster[a.cluster_id]) < max_per_cluster:
+                by_cluster[a.cluster_id].append(a)
+        for arts in by_cluster.values():
+            for a in arts:
+                nodes.append({
+                    "id": f"article_{a.id}", "type": "article", "label": a.title[:60],
+                    "data": {
+                        "id": a.id, "title": a.title, "source": a.source, "url": a.url,
+                        "published_at": str(a.published_at) if a.published_at else None,
+                        "cluster_id": a.cluster_id,
+                        "content_quality": a.content_quality,
+                    },
+                })
                 edges.append({
                     "source": f"article_{a.id}",
                     "target": f"cluster_{a.cluster_id}",
                     "type": "member",
                 })
 
+    if cluster_ids:
         stories_res = await db.execute(
             select(KnowledgeStoryORM).where(KnowledgeStoryORM.cluster_id.in_(cluster_ids))
         )

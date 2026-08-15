@@ -35,6 +35,8 @@ async def save_newsletter(newsletter: Newsletter, session: AsyncSession) -> News
         session.add(orm)
 
     orm.html_content = newsletter.html_content
+    if newsletter.email_html_content:
+        orm.email_html_content = newsletter.email_html_content
     await session.flush()
     newsletter.id = orm.id
     log.info("Newsletter saved for %s (id=%s)", newsletter.date, orm.id)

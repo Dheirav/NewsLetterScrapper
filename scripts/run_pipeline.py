@@ -35,7 +35,7 @@ import logging
 import logging.config
 import time
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import select
@@ -62,7 +62,7 @@ from services.personalization.profiler import build_profile
 from services.personalization.adapter import adapt_newsletter
 
 from services.newsletter.assembler import assemble
-from services.newsletter.renderer import render_html
+from services.newsletter.renderer import render_both
 from services.newsletter.repository import save_newsletter, mark_sent
 from services.newsletter.emailer import send_email
 from core.schemas.models import Article as ArticleSchema
@@ -151,10 +151,15 @@ async def _record_step(
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
-async def run(mode: str = "concise") -> None:
+async def run(mode: str = "concise", test: bool = False) -> None:
     today = date.today()
     log.info("\n%s", BANNER)
-    log.info("  INTELLIGENCE BRIEFING PIPELINE  --  %s  (mode=%s)", today, mode)
+    log.info(
+        "  INTELLIGENCE BRIEFING PIPELINE  --  %s  (mode=%s)%s",
+        today,
+        mode,
+        "  [TEST MODE]" if test else "",
+    )
     log.info("%s\n", BANNER)
 
     pipeline_start = time.monotonic()
@@ -200,7 +205,7 @@ async def run(mode: str = "concise") -> None:
             result = await session.execute(
                 select(ArticleORM).where(
                     ArticleORM.embedding.is_not(None),
-                    ArticleORM.created_at >= str(today),
+                    ArticleORM.created_at >= datetime(today.year, today.month, today.day, tzinfo=timezone.utc),
                 )
             )
             embedded = [
@@ -271,8 +276,12 @@ async def run(mode: str = "concise") -> None:
 
         # -- 13. Render HTML -------------------------------------------------
         async with _step(13, "Rendering HTML newsletter"):
-            html = render_html(newsletter)
-            log.info("Rendered %d characters of HTML", len(html))
+            web_html, email_html = render_both(newsletter)
+            log.info(
+                "Rendered web=%d chars, email=%d chars",
+                len(web_html),
+                len(email_html),
+            )
 
         # -- 14. Save newsletter to DB (skippable) ---------------------------
         async with _step(14, "Saving newsletter to database"):
@@ -282,9 +291,21 @@ async def run(mode: str = "concise") -> None:
         # -- 15. Send email --------------------------------------------------
         async with _step(15, "Sending email"):
             subject = f"Intelligence Briefing -- {today.strftime('%B %d, %Y')}"
-            sent = await send_email(html, subject=subject)
-            if sent and newsletter.id:
-                await mark_sent(newsletter.id, session)
+            if test:
+                if not settings.test_email:
+                    log.error("--test requires TEST_EMAIL to be set in .env")
+                    raise SystemExit(1)
+                log.info(
+                    "TEST MODE — sending only to %s (newsletter will NOT be marked as sent)",
+                    settings.test_email,
+                )
+                sent = await send_email(
+                    email_html, subject=subject, recipients=[settings.test_email]
+                )
+            else:
+                sent = await send_email(email_html, subject=subject)
+                if sent and newsletter.id:
+                    await mark_sent(newsletter.id, session)
         if sent:
             await _record_step("email", today, session)
 
@@ -315,5 +336,11 @@ if __name__ == "__main__":
             "'detailed' = 5 focused calls per cluster (richer, ~5x slower)."
         ),
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        default=False,
+        help="Send email only to TEST_EMAIL from .env. Newsletter is NOT marked as sent.",
+    )
     args = parser.parse_args()
-    asyncio.run(run(mode=args.mode))
+    asyncio.run(run(mode=args.mode, test=args.test))

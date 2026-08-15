@@ -11,16 +11,31 @@ import logging
 import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from urllib.parse import quote
 
 import aiosmtplib
 
 from core.config import settings
+from core.db.session import get_session
 
 log = logging.getLogger(__name__)
 
 
 def _build_message(html_content: str, subject: str, to_address: str) -> MIMEMultipart:
-    """Build a MIME message addressed to a single recipient."""
+    """Build a MIME message addressed to a single recipient.
+
+    Replaces the ``__UNSUBSCRIBE_LINK__`` placeholder with a signed,
+    per-recipient one-click unsubscribe URL.
+    """
+    # Lazy import to avoid a circular dependency at module load time.
+    from services.newsletter.unsubscribe import make_token  # noqa: PLC0415
+    token = make_token(to_address)
+    unsub_url = (
+        f"{settings.public_url}/api/newsletter/unsubscribe"
+        f"?email={quote(to_address)}&token={token}"
+    )
+    html_content = html_content.replace("__UNSUBSCRIBE_LINK__", unsub_url)
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{settings.email_from_name} <{settings.smtp_user}>"
@@ -42,10 +57,14 @@ async def send_email(
     Send an HTML email via the configured SMTP server.
     Each recipient gets their own individual email so no one can see
     the other recipients.
+    Opted-out addresses are automatically skipped.
     `recipients` can be a single address, a list of addresses, or None
     (falls back to all_recipients from settings).
     Returns True if the message was delivered to at least one recipient.
     """
+    # Lazy import to avoid a circular dependency at module load time.
+    from services.newsletter.unsubscribe import is_opted_out  # noqa: PLC0415
+
     # Normalise to a list
     if recipients is None:
         to_list = settings.all_recipients
@@ -57,6 +76,19 @@ async def send_email(
     to_list = [a.strip() for a in to_list if a.strip()]
     if not to_list:
         log.warning("No recipient email configured — skipping send")
+        return False
+
+    # Filter out opted-out addresses.
+    async with get_session() as session:
+        filtered: list[str] = []
+        for addr in to_list:
+            if await is_opted_out(addr, session):
+                log.info("Skipping opted-out recipient: %s", addr)
+            else:
+                filtered.append(addr)
+    to_list = filtered
+    if not to_list:
+        log.warning("All recipients have opted out — skipping send")
         return False
 
     smtp_kwargs = dict(

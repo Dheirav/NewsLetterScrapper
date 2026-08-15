@@ -54,8 +54,10 @@ NewsLetterScrapper/
 │   └── crud_db.py          Full CRUD CLI tool
 ├── migrations/             Alembic migration versions
 └── templates/
-    ├── newsletter.html     Jinja2 newsletter template
-    └── graph.html          Obsidian-style knowledge graph UI
+    ├── newsletter_web.html   Jinja2 template — web reader (JS reading tracker, collapsible cards)
+    ├── newsletter_email.html Jinja2 template — email version (no JS, fully expanded)
+    ├── dashboard.html        Landing page / dashboard UI
+    └── graph.html            Obsidian-style knowledge graph UI
 ```
 
 ---

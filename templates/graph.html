@@ -100,6 +100,9 @@
   <input id="days-input" type="number" value="7" min="1" max="90"/>
   <button class="btn primary" id="reload-btn">Reload</button>
   <button class="btn" id="reset-zoom-btn">Reset Zoom</button>
+  <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#8b949e;cursor:pointer;white-space:nowrap;user-select:none">
+    <input type="checkbox" id="articles-toggle" style="cursor:pointer"/> Articles
+  </label>
 </div>
 
 <div id="statsbar">
@@ -185,9 +188,10 @@ async function loadStats() {
 
 async function loadGraph() {
   const days = parseInt(document.getElementById('days-input').value) || 7;
+  const includeArticles = document.getElementById('articles-toggle').checked;
   document.getElementById('loading').classList.remove('hidden');
   try {
-    graphData = await apiFetch(`/data?days=${days}`);
+    graphData = await apiFetch(`/data?days=${days}&include_articles=${includeArticles}`);
     renderGraph(graphData);
     document.getElementById('stat-total').textContent =
       `${graphData.nodes.length} nodes · ${graphData.edges.length} edges`;
@@ -258,17 +262,25 @@ function renderGraph(data) {
   nodeSel.append('text')
     .attr('x', d => (RADII[d.type]||6) + 4)
     .attr('y', 0)
-    .text(d => d.label.length > 28 ? d.label.slice(0,28)+'…' : d.label);
+    // Hide article labels on larger graphs — too small to read and hurts perf
+    .text(d => {
+      if (d.type === 'article' && data.nodes.length > 80) return '';
+      return d.label.length > 28 ? d.label.slice(0,28)+'\u2026' : d.label;
+    });
 
   // Click on blank area → deselect
   svg.on('click', () => closePanel());
 
   simulation = d3.forceSimulation(data.nodes)
+    .alphaDecay(0.045)          // cool 2x faster (default 0.0228) → fewer total ticks
+    .velocityDecay(0.55)        // more drag → stabilises sooner
     .force('link', d3.forceLink(data.edges)
       .id(d => d.id)
       .distance(d => d.type==='knowledge'?80 : d.type==='member'?50 : 120)
       .strength(.6))
-    .force('charge', d3.forceManyBody().strength(d => RADII[d.type]||6).strength(-180))
+    .force('charge', d3.forceManyBody()
+      .strength(d => d.type==='article' ? -60 : -180)  // lighter repulsion for articles
+      .theta(0.9))                                      // Barnes-Hut approx (faster for big graphs)
     .force('center', d3.forceCenter(W/2, H/2))
     .force('collision', d3.forceCollide().radius(d => (RADII[d.type]||6)+12))
     .on('tick', ticked);
@@ -539,6 +551,7 @@ document.getElementById('panel-close').addEventListener('click', closePanel);
 document.getElementById('reload-btn').addEventListener('click', loadGraph);
 document.getElementById('reset-zoom-btn').addEventListener('click', () => window._resetZoom && window._resetZoom());
 document.getElementById('days-input').addEventListener('keydown', e => { if (e.key==='Enter') loadGraph(); });
+document.getElementById('articles-toggle').addEventListener('change', loadGraph);
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 

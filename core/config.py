@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     #   RECIPIENT_EMAILS=alice@example.com,bob@example.com
     recipient_emails: str = Field(default="")
     email_from_name: str = Field(default="Intelligence Briefing")
+    # Test mode: when --test is passed to run_pipeline.py or send_newsletter.py
+    # the email is sent only to this address and the newsletter is NOT marked as sent.
+    #   TEST_EMAIL=yourname+test@gmail.com
+    test_email: str = Field(default="")
 
     @property
     def all_recipients(self) -> List[str]:
@@ -102,6 +106,15 @@ class Settings(BaseSettings):
     # ── Archiving ─────────────────────────────────────────────────────────────
     # scripts/archive.py deletes articles older than this many days
     archive_keep_days: int = Field(default=90)
+
+    # ── Unsubscribe ───────────────────────────────────────────────────────────
+    # Public-facing base URL used to build one-click unsubscribe links.
+    # Override in .env: PUBLIC_URL=https://your.domain.com
+    public_url: str = Field(default="http://localhost:8000")
+    # HMAC secret for signing unsubscribe tokens.
+    # Defaults to smtp_password so existing deployments work out of the box;
+    # set UNSUBSCRIBE_SECRET in .env to isolate the signing key.
+    unsubscribe_secret: str = Field(default="")
 
     # ── Production guard ──────────────────────────────────────────────────────
 

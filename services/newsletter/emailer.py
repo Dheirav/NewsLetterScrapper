@@ -24,22 +24,50 @@ log = logging.getLogger(__name__)
 def _build_message(html_content: str, subject: str, to_address: str) -> MIMEMultipart:
     """Build a MIME message addressed to a single recipient.
 
-    Replaces the ``__UNSUBSCRIBE_LINK__`` placeholder with a signed,
-    per-recipient one-click unsubscribe URL.
+    Sets a per-recipient ``List-Unsubscribe`` header and replaces the
+    ``__UNSUBSCRIBE_LINK__`` placeholder in the body.
+
+    Two unsubscribe routes are offered, and which ones are available depends on
+    whether PUBLIC_URL is actually reachable:
+
+    * ``mailto:`` — always present. Needs no hosting, so it keeps working while
+      the machine running this pipeline is asleep. This is the only route that
+      functions for a laptop-hosted deployment.
+    * ``https://`` — added only when PUBLIC_URL is reachable, and advertised as
+      RFC 8058 one-click only when it is also HTTPS. Claiming one-click without
+      a POST-capable HTTPS endpoint gives mail clients a button that fails.
     """
     # Lazy import to avoid a circular dependency at module load time.
-    from services.newsletter.unsubscribe import make_token  # noqa: PLC0415
-    token = make_token(to_address)
-    unsub_url = (
-        f"{settings.public_url}/api/newsletter/unsubscribe"
-        f"?email={quote(to_address)}&token={token}"
+    from services.newsletter.unsubscribe import (  # noqa: PLC0415
+        make_mailto_link,
+        make_token,
     )
-    html_content = html_content.replace("__UNSUBSCRIBE_LINK__", unsub_url)
+
+    mailto_link = make_mailto_link(to_address)
+    targets = []
+    https_url = None
+
+    if settings.public_url_is_reachable:
+        https_url = (
+            f"{settings.public_url}/api/newsletter/unsubscribe"
+            f"?email={quote(to_address)}&token={make_token(to_address)}"
+        )
+        targets.append(f"<{https_url}>")
+    targets.append(f"<{mailto_link}>")
+
+    # The visible footer link falls back to mailto when there is no reachable
+    # host, so recipients never see a localhost URL.
+    html_content = html_content.replace(
+        "__UNSUBSCRIBE_LINK__", https_url or mailto_link
+    )
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{settings.email_from_name} <{settings.smtp_user}>"
     msg["To"] = to_address
+    msg["List-Unsubscribe"] = ", ".join(targets)
+    if https_url and settings.supports_one_click_unsubscribe:
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
     plain = re.sub(r"<[^>]+>", " ", html_content)
     plain = re.sub(r"\s+", " ", plain).strip()

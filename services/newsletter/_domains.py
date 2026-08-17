@@ -4,16 +4,23 @@ services/newsletter/_domains.py
 Single source of truth for domain keyword mapping.
 Used by both assembler.py (for logging) and renderer.py (for Jinja2 filter).
 """
-from typing import Dict, List
+import re
+from typing import Dict, List, Pattern
 
 # SECTION_ORDER controls the sequence of sections in the rendered newsletter.
 SECTION_ORDER = ["World", "India", "Policy", "Economy", "AI", "Technology", "Science", "Health", "Sport", "Entertainment", "Other"]
 
 # Keyword lists for domain inference from topic_label text.
 # Precedence: first match wins, in dict iteration order.
+#
+# Keywords are matched on WORD BOUNDARIES, not as raw substrings. This matters:
+# a plain `"rate" in label` also fires on "corporate", "separate" and "moderate",
+# and `"app"` fires on "happened" — which silently filed general news under
+# Economy and Technology. Keep entries as whole words or whole phrases; there is
+# no need to pad them with spaces (the old " ai " hack).
 DOMAIN_KEYWORDS: Dict[str, List[str]] = {
     "AI": [
-        "artificial intelligence", " ai ", " llm", "large language model",
+        "artificial intelligence", "ai", "llm", "large language model",
         "machine learning", "deep learning", "neural network", "openai",
         "deepmind", "anthropic", "gemini", "gpt", "ollama", "chatbot",
     ],
@@ -63,10 +70,37 @@ DOMAIN_KEYWORDS: Dict[str, List[str]] = {
 }
 
 
+def _compile(keywords: List[str]) -> Pattern[str] | None:
+    """
+    Build one alternation regex per domain, longest keyword first so that
+    "large language model" wins over a bare "model" if both are ever listed.
+    Returns None for the empty catch-all domain.
+    """
+    if not keywords:
+        return None
+    ordered = sorted(keywords, key=len, reverse=True)
+    return re.compile(
+        r"\b(?:" + "|".join(re.escape(k) for k in ordered) + r")\b",
+        flags=re.IGNORECASE,
+    )
+
+
+# Compiled once at import — infer_domain runs per story on every render.
+_DOMAIN_PATTERNS: List[tuple[str, Pattern[str]]] = [
+    (domain, pattern)
+    for domain, keywords in DOMAIN_KEYWORDS.items()
+    if (pattern := _compile(keywords)) is not None
+]
+
+
 def infer_domain(topic_label: str) -> str:
-    """Return the most specific domain for a given topic label string."""
-    label_lower = f" {topic_label.lower()} "  # pad to help word-boundary matching
-    for domain, keywords in DOMAIN_KEYWORDS.items():
-        if any(kw in label_lower for kw in keywords):
+    """
+    Return the most specific domain for a given topic label string.
+
+    First match wins, following DOMAIN_KEYWORDS order. Anything unmatched
+    falls through to "World", which is the intended catch-all.
+    """
+    for domain, pattern in _DOMAIN_PATTERNS:
+        if pattern.search(topic_label):
             return domain
     return "World"

@@ -19,10 +19,12 @@ Usage:
     from services.knowledge.generator import generate_knowledge_stories
 
     # Fast daily run (default)
-    stories = await generate_knowledge_stories(clusters, session)
+    stories = await generate_knowledge_stories(clusters, session, run_date=today)
 
     # In-depth weekly run
-    stories = await generate_knowledge_stories(clusters, session, mode="detailed")
+    stories = await generate_knowledge_stories(
+        clusters, session, run_date=today, mode="detailed"
+    )
 """
 import asyncio
 import json
@@ -112,6 +114,49 @@ def _parse_talking_points(raw: str) -> List[str]:
     return lines[:6]  # cap at 6 bullets
 
 
+# Below this, a story's talking points are worth one extra call to recover.
+# The adapter trims low-engagement stories to three, so three is the floor at
+# which the section still reads as intended.
+MIN_TALKING_POINTS = 3
+
+
+async def _backfill_talking_points(
+    cluster: StoryCluster, existing: List[str]
+) -> List[str]:
+    """
+    Re-request only the talking points, using detailed mode's focused prompt.
+
+    Cheaper and less wasteful than retrying the whole JSON call: the other four
+    sections were fine, and this prompt asks for one thing so the model is far
+    less likely to collapse the list. Falls back to whatever was already parsed
+    if the second attempt is no better.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        raw = await loop.run_in_executor(
+            None,
+            _chat_text_sync,
+            TALKING_POINTS_PROMPT.format(
+                topic_label=cluster.topic_label,
+                articles_text=build_articles_text(cluster.articles),
+            ),
+        )
+        recovered = _parse_talking_points(raw)
+    except Exception as exc:
+        log.warning(
+            "talking-point backfill failed for '%s': %s", cluster.topic_label[:50], exc
+        )
+        return existing
+
+    if len(recovered) > len(existing):
+        log.info(
+            "  backfilled talking points for '%s': %d -> %d",
+            cluster.topic_label[:50], len(existing), len(recovered),
+        )
+        return recovered
+    return existing
+
+
 async def _generate_one_concise(cluster: StoryCluster) -> KnowledgeStory | None:
     """
     CONCISE mode: generate all five knowledge sections in a single LLM call
@@ -144,6 +189,14 @@ async def _generate_one_concise(cluster: StoryCluster) -> KnowledgeStory | None:
 
         if not exec_summary:
             raise ValueError("LLM returned empty executive_summary")
+
+        # Models routinely collapse the talking_points array in JSON mode even
+        # when the prose sections come back well-formed — measured at 5 of 30
+        # stories returning a single bullet against a prompt asking for five.
+        # Rather than discard four good sections and pay for a full retry, ask
+        # again for just this field using the focused prompt from detailed mode.
+        if len(talking_points) < MIN_TALKING_POINTS:
+            talking_points = await _backfill_talking_points(cluster, talking_points)
 
         reliability_notes = assess_reliability(cluster)
 
@@ -244,6 +297,7 @@ async def _generate_one_detailed(cluster: StoryCluster) -> KnowledgeStory | None
 async def generate_knowledge_stories(
     clusters: List[StoryCluster],
     session: AsyncSession,
+    run_date: date,
     max_concurrent: int = 5,
     mode: Literal["concise", "detailed"] = "concise",
 ) -> List[KnowledgeStory]:
@@ -253,6 +307,10 @@ async def generate_knowledge_stories(
 
     mode="concise"  — one JSON call per cluster (default, fast daily use)
     mode="detailed" — five focused calls per cluster (richer output, ~5× slower)
+
+    ``run_date`` is the date the pipeline run started. It stamps both the saved
+    stories and any dead-letter rows, so a run that crosses midnight keeps all
+    of its output on one date instead of splitting across two.
 
     Limits concurrent Ollama calls to avoid overloading local inference.
     """
@@ -301,12 +359,11 @@ async def generate_knowledge_stories(
 
     pairs = await asyncio.gather(*[guarded(c) for c in clusters])
     stories: list[KnowledgeStory] = []
-    run_date = date.today()
 
     # Persist sequentially — AsyncSession must not be accessed from concurrent coroutines
     for cluster, story in pairs:
         if story is not None:
-            await save_knowledge_story(story, session)
+            await save_knowledge_story(story, session, run_date)
             stories.append(story)
         else:
             # Dead-letter: record the failed cluster for manual inspection/retry

@@ -12,11 +12,12 @@ from collections import defaultdict
 from datetime import date
 
 import ollama
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.limiter import limiter
 from core.config import settings
 from core.db.orm_models import ReadingEventORM
 from core.db.session import get_db
@@ -78,10 +79,17 @@ async def today_reflection_redirect():
     response_model=ReflectionResponse,
     summary="Get reading statistics and AI reflection for a given day",
 )
+@limiter.limit("10/minute")
 async def get_reflection(
+    request: Request,
     reflection_date: date,
     session: AsyncSession = Depends(get_db),
 ):
+    """
+    Rate-limited because each call runs a blocking Ollama generation. Without a
+    limit, repeated requests queue LLM work on the same machine the pipeline
+    runs on — a cheap way to starve it, especially over a public tunnel.
+    """
     result = await session.execute(
         select(ReadingEventORM).where(ReadingEventORM.event_date == reflection_date)
     )

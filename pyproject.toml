@@ -23,3 +23,11 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+# Integration tests share one session-scoped engine. Without this, async
+# fixtures get a per-function event loop while the engine's asyncpg
+# connections belong to another, and every savepoint fails with
+# "another operation is in progress".
+asyncio_default_fixture_loop_scope = "session"
+markers = [
+    "integration: requires a live PostgreSQL with pgvector",
+]

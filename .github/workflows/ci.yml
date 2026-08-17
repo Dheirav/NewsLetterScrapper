@@ -10,6 +10,30 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      # Real PostgreSQL with pgvector. The integration suite exercises cosine
+      # distance ordering, delete predicates against NULL columns, UPDATE
+      # rowcounts and FK cascade ordering — none of which a stubbed session
+      # models, and all of which have hidden real bugs in this project.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: intelligence_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Integration tests build a throwaway schema inside this database.
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/intelligence_test
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/intelligence_test
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,5 +51,16 @@ jobs:
           pip install -e .
 
       - name: Run tests
-        run: |
-          python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -v --tb=short
+
+      # The reading tracker lives inside templates/newsletter_web.html and is
+      # the source of the reading_events data that personalisation is built on.
+      # A Node harness extracts the script from the template, so edits there are
+      # covered — but pytest does not run them.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run reading tracker tests
+        run: node tests/js/tracker.test.mjs

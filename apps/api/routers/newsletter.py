@@ -24,6 +24,30 @@ async def today_redirect():
     return RedirectResponse(url=f"/api/newsletter/{date.today().isoformat()}")
 
 
+@router.post(
+    "/unsubscribe",
+    summary="RFC 8058 one-click unsubscribe",
+    status_code=200,
+)
+async def unsubscribe_one_click(
+    email: str = Query(...),
+    token: str = Query(...),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Mail clients that honour the ``List-Unsubscribe-Post`` header POST here
+    directly, with no page load and no confirmation step. The emailer only
+    advertises one-click when PUBLIC_URL is HTTPS, so this must stay in step
+    with ``settings.supports_one_click_unsubscribe``.
+
+    Returns JSON rather than HTML — nothing renders this response.
+    """
+    if not verify_token(email, token):
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe token.")
+    await opt_out(email, session)
+    return {"status": "unsubscribed", "email": email}
+
+
 @router.get(
     "/unsubscribe",
     response_class=HTMLResponse,

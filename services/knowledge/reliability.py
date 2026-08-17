@@ -20,16 +20,13 @@ import re
 from pathlib import Path
 from typing import Dict, List
 
-import yaml
+from services.ingestion.source_catalog import load_catalog
 
 log = logging.getLogger(__name__)
 
 from core.schemas.models import StoryCluster
 
 SOURCES_PATH = Path(__file__).parents[2] / "services" / "ingestion" / "sources.yaml"
-
-# Module-level cache — loaded once, not re-read on every assess_reliability() call
-_SOURCE_TIERS_CACHE: Dict[str, int] | None = None
 
 # Words / phrases associated with sensationalist journalism
 _SENSATIONAL_PATTERNS = re.compile(
@@ -48,18 +45,14 @@ _NEUTRAL_PATTERNS = re.compile(
 
 
 def _load_source_tiers(path: Path = SOURCES_PATH) -> Dict[str, int]:
-    """Return {source_name: tier} mapping from sources.yaml. Result is cached."""
-    global _SOURCE_TIERS_CACHE
-    if _SOURCE_TIERS_CACHE is not None:
-        return _SOURCE_TIERS_CACHE
-    try:
-        with open(path) as f:
-            data = yaml.safe_load(f)
-        _SOURCE_TIERS_CACHE = {s["name"]: s.get("tier", 3) for s in data.get("sources", [])}
-        return _SOURCE_TIERS_CACHE
-    except Exception as exc:
-        log.warning("Failed to load source tiers from %s: %s", path, exc)
-        return {}
+    """
+    Return {source_name: tier} from sources.yaml.
+
+    Delegates to the shared catalogue so tiers and ranking weights cannot drift
+    apart — this module and the personalisation adapter both read the same file
+    and previously each parsed it themselves.
+    """
+    return {name: meta["tier"] for name, meta in load_catalog(path).items()}
 
 
 def assess_reliability(

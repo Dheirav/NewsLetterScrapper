@@ -22,7 +22,9 @@ from core.config import settings
 
 _engine = create_async_engine(
     settings.database_url,
-    echo=(settings.app_env == "development"),
+    # SQL_ECHO, defaulting to on in development. Kept separate from APP_ENV so a
+    # CLI can ask for quiet output without claiming to be a production process.
+    echo=bool(settings.sql_echo),
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,

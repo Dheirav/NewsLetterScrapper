@@ -60,6 +60,13 @@ class ArticleORM(Base):
     cluster_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("story_clusters.cluster_id"), nullable=True
     )
+    # Set when this article is a near-identical restatement of an earlier one
+    # (republished under a new URL, retitled, or syndicated). Marked rather than
+    # deleted so URL dedup keeps recognising it — deleting would let the same
+    # URL be re-fetched and re-embedded on every subsequent run.
+    duplicate_of: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

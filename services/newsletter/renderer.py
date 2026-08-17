@@ -65,11 +65,21 @@ def render_web_html(newsletter: Newsletter) -> str:
 def render_email_html(newsletter: Newsletter) -> str:
     """Render the email-safe version (no JS, all sections fully expanded).
 
+    The "Read full briefing online" link is omitted entirely when PUBLIC_URL is
+    not reachable — showing recipients a localhost URL is worse than showing
+    them nothing. Passed through the template context rather than substituted
+    into the rendered string so the anchor can be dropped, not just blanked.
+
     Sets ``newsletter.email_html_content`` and returns the rendered string.
     """
-    html = _env.get_template("newsletter_email.html").render(**_TEMPLATE_CONTEXT(newsletter))
-    web_url = f"{settings.public_url}/api/newsletter/{newsletter.date.isoformat()}"
-    html = html.replace("__WEB_LINK__", web_url)
+    web_url = (
+        f"{settings.public_url}/api/newsletter/{newsletter.date.isoformat()}"
+        if settings.public_url_is_reachable
+        else ""
+    )
+    html = _env.get_template("newsletter_email.html").render(
+        **_TEMPLATE_CONTEXT(newsletter), web_url=web_url
+    )
     newsletter.email_html_content = html
     return html
 

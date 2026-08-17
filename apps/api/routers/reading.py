@@ -10,16 +10,14 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.limiter import limiter
 from core.db.orm_models import ReadingEventORM
 from core.db.session import get_db
 
 log = logging.getLogger(__name__)
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 class ReadingEventIn(BaseModel):

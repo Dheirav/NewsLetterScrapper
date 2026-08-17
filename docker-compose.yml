@@ -74,12 +74,22 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       APP_ENV: development
       LOG_LEVEL: INFO
-      # Set API_KEY to a non-empty string to enable authentication:
+      # API_KEY protects /api/graph/* (the CRUD surface that can delete data),
+      # /api/reflection/*, the opted-out roster, and /docs. Public newsletter
+      # reading, unsubscribe and the reading tracker stay open.
+      # Set this before exposing the server beyond localhost.
       # API_KEY: your-secret-key-here
+      #
+      # PUBLIC_URL is baked into the unsubscribe and "read online" links of
+      # every email sent. A localhost value ships dead links to recipients.
+      # PUBLIC_URL: https://briefing.example.com
     ports:
       - "8000:8000"
     volumes:
-      # Mount source code for live reload during development:
+      # Source is mounted so --reload below picks up edits. Remove BOTH this
+      # mount and the --reload flag for a production deployment: --reload runs
+      # a file-watching supervisor that costs memory and restarts the server on
+      # any write.
       - .:/app
     command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:

@@ -85,15 +85,19 @@ async def patch_article(
     values = {k: v for k, v in body.model_dump().items() if v is not None}
     if not values:
         raise HTTPException(status_code=400, detail="No fields to update")
-    await db.execute(
+    result = await db.execute(
         update(ArticleORM).where(ArticleORM.id == article_id).values(**values)
     )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Article not found")
     await db.commit()
     return {"updated": article_id}
 
 
 @router.delete("/{article_id}", summary="Delete article")
 async def delete_article(article_id: int, db: AsyncSession = Depends(get_db)):
-    await db.execute(delete(ArticleORM).where(ArticleORM.id == article_id))
+    result = await db.execute(delete(ArticleORM).where(ArticleORM.id == article_id))
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Article not found")
     await db.commit()
     return {"deleted": article_id}

@@ -7,6 +7,7 @@ Functions
 ---------
 make_token(email)           — generate HMAC-SHA256 token for unsubscribe link
 verify_token(email, token)  — constant-time token verification
+make_mailto_link(email)     — hosting-free unsubscribe target for List-Unsubscribe
 opt_out(email, session)     — add address to the unsubscribes table
 is_opted_out(email, session)— check if an address has opted out
 get_all_opted_out(session)  — return every opted-out address
@@ -14,6 +15,7 @@ get_all_opted_out(session)  — return every opted-out address
 import hashlib
 import hmac
 import logging
+from urllib.parse import quote
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +40,25 @@ def verify_token(email: str, token: str) -> bool:
     """Constant-time comparison to prevent timing attacks."""
     expected = make_token(email)
     return hmac.compare_digest(expected, token)
+
+
+def make_mailto_link(email: str) -> str:
+    """
+    Build a ``mailto:`` unsubscribe target that needs no hosting at all.
+
+    This is the fallback that keeps opt-out working when PUBLIC_URL is not
+    reachable — a self-hosted pipeline on a laptop is asleep most of the time,
+    but a recipient can still unsubscribe at 2am by sending mail. The signed
+    token travels in the body so the request can be verified (and later
+    processed automatically) exactly like the HTTPS route.
+    """
+    subject = quote(f"Unsubscribe {email}")
+    body = quote(
+        "Send this message as-is to be removed from the Intelligence Briefing.\n\n"
+        f"address: {email}\n"
+        f"token: {make_token(email)}\n"
+    )
+    return f"mailto:{settings.smtp_user}?subject={subject}&body={body}"
 
 
 async def opt_out(email: str, session: AsyncSession) -> bool:

@@ -307,85 +307,129 @@
 (function () {
   'use strict';
 
-  const API_BASE = '/api';  // FastAPI backend
-  const newsletter_date = document.body.dataset.newsletterDate;
-  const startTime = Date.now();
+  // Each flush reports the time accrued SINCE THE LAST FLUSH, not a running
+  // total. The previous version posted the cumulative figure every 60 seconds
+  // without clearing it, so a tab left open turned one story into dozens of
+  // rows whose times summed to many multiples of the real reading time.
+  //
+  // Flushing also used to null the clock on cards still on screen. The
+  // IntersectionObserver only fires on a *change*, and a card you are still
+  // reading never stops intersecting — so the story held longest in view
+  // stopped counting after the first flush. Time is now re-based instead of
+  // discarded, which is why `flush()` and `accumulate()` are separate.
 
-  // Track which sections have been viewed (IntersectionObserver)
-  const sectionsRead = new Set();
-  const storyTimes = {};   // topic_slug → {start, totalSeconds}
+  const ENDPOINT = '/api/events/reading';
+  const FLUSH_INTERVAL_MS = 60000;
+  const MIN_REPORTABLE_MS = 2000;   // below this, treat as an accidental scroll-past
 
+  const newsletterDate = document.body.dataset.newsletterDate;
+
+  // topic_slug → { start: epoch ms | null, pending: ms, sections: Set }
+  const stories = new Map();
+
+  function stateFor(slug) {
+    if (!stories.has(slug)) {
+      stories.set(slug, { start: null, pending: 0, sections: new Set() });
+    }
+    return stories.get(slug);
+  }
+
+  /** Fold elapsed time into `pending` and re-base the clock if still visible. */
+  function accumulate(state, stillVisible) {
+    const now = Date.now();
+    if (state.start !== null) {
+      state.pending += now - state.start;
+    }
+    state.start = stillVisible ? now : null;
+  }
+
+  // ── Sections, scoped to their own story ────────────────────────────────────
+  // sections_read used to be one page-wide Set attached to every event, so
+  // opening "Implications" on a single story recorded it against all of them.
   const sectionObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const section = entry.target.dataset.section;
-        if (section) sectionsRead.add(section);
-      }
-    });
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const section = entry.target.dataset.section;
+      const card = entry.target.closest('.story[data-topic-slug]');
+      if (section && card) stateFor(card.dataset.topicSlug).sections.add(section);
+    }
   }, { threshold: 0.5 });
 
   document.querySelectorAll('[data-section]').forEach(el => sectionObserver.observe(el));
 
-  // Track time per story card
+  // ── Time per story card ────────────────────────────────────────────────────
   const storyObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
+    for (const entry of entries) {
       const slug = entry.target.dataset.topicSlug;
-      if (!slug) return;
-      if (entry.isIntersecting) {
-        storyTimes[slug] = storyTimes[slug] || { start: Date.now(), total: 0 };
-        storyTimes[slug].start = Date.now();
-      } else if (storyTimes[slug] && storyTimes[slug].start) {
-        storyTimes[slug].total += (Date.now() - storyTimes[slug].start);
-        storyTimes[slug].start = null;
-      }
-    });
+      if (!slug) continue;
+      accumulate(stateFor(slug), entry.isIntersecting);
+    }
   }, { threshold: 0.3 });
 
   document.querySelectorAll('.story[data-topic-slug]').forEach(el => storyObserver.observe(el));
 
   function getScrollPercent() {
     const el = document.documentElement;
-    return Math.min(100, Math.round(
-      (el.scrollTop / (el.scrollHeight - el.clientHeight)) * 100
-    ));
+    const scrollable = el.scrollHeight - el.clientHeight;
+    // A briefing that fits the viewport has nothing to scroll. Dividing by zero
+    // produced NaN, which serialises to null and is rejected by the endpoint's
+    // `scroll_percent: float` with a 422 the client never sees.
+    if (scrollable <= 0) return 100;
+    return Math.max(0, Math.min(100, Math.round((el.scrollTop / scrollable) * 100)));
   }
 
-  async function sendEvents() {
+  /**
+   * Post everything accrued since the last flush and reset the counters.
+   * `useBeacon` is set on page teardown: fetch() is not guaranteed to survive
+   * an unloading document, whereas sendBeacon is queued by the browser and
+   * delivered regardless.
+   */
+  function flush(useBeacon) {
     const scrollPercent = getScrollPercent();
 
-    // Flush any stories still in view
-    document.querySelectorAll('.story[data-topic-slug]').forEach(el => {
-      const slug = el.dataset.topicSlug;
-      if (storyTimes[slug] && storyTimes[slug].start) {
-        storyTimes[slug].total += (Date.now() - storyTimes[slug].start);
-        storyTimes[slug].start = null;
-      }
-    });
+    for (const [slug, state] of stories) {
+      // Fold in time up to this instant; keep counting if the card is on screen.
+      accumulate(state, state.start !== null);
 
-    const events = Object.entries(storyTimes).map(([slug, data]) => ({
-      date: newsletter_date,
-      topic_slug: slug,
-      time_spent_seconds: Math.round(data.total / 1000),
-      scroll_percent: scrollPercent,
-      sections_read: Array.from(sectionsRead),
-    }));
+      if (state.pending < MIN_REPORTABLE_MS) continue;   // keep accruing, don't drop
 
-    for (const event of events) {
-      if (event.time_spent_seconds < 2) continue;  // skip accidental hovers
+      const payload = JSON.stringify({
+        date: newsletterDate,
+        topic_slug: slug,
+        time_spent_seconds: Math.round(state.pending / 1000),
+        scroll_percent: scrollPercent,
+        sections_read: Array.from(state.sections),
+      });
+
+      // Reset before the request: an in-flight failure must not double-count
+      // on the next flush.
+      state.pending = 0;
+      state.sections.clear();
+
       try {
-        await fetch(`${API_BASE}/events/reading`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(event),
-          keepalive: true,
-        });
-      } catch (e) { /* silently ignore network errors */ }
+        if (useBeacon && navigator.sendBeacon) {
+          navigator.sendBeacon(ENDPOINT, new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch(ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true,
+          }).catch(() => { /* network errors are not worth surfacing to a reader */ });
+        }
+      } catch (e) { /* never let instrumentation break the page */ }
     }
   }
 
-  window.addEventListener('beforeunload', sendEvents);
-  // Also send every 60s in case tab is left open
-  setInterval(sendEvents, 60000);
+  setInterval(() => flush(false), FLUSH_INTERVAL_MS);
+
+  // 'visibilitychange' to hidden is the only teardown signal mobile browsers
+  // reliably fire; 'pagehide' covers bfcache navigation. Flushing zeroes the
+  // counters, so a double fire simply finds nothing left to send.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush(true);
+  });
+  window.addEventListener('pagehide', () => flush(true));
 })();
 </script>
 

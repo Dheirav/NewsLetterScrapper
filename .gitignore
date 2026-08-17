@@ -53,3 +53,7 @@ htmlcov/
 # mypy / type checkers
 .mypy_cache/
 .dmypy.json
+
+# Timestamped .env backups (contain secrets)
+.env.*
+!.env.example

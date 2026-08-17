@@ -27,7 +27,7 @@ from pathlib import Path
 
 # Silence SQLAlchemy echo BEFORE importing anything from core
 import os
-os.environ.setdefault("APP_ENV", "production")
+os.environ.setdefault("SQL_ECHO", "false")  # quiet output; do NOT fake APP_ENV
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)

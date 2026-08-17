@@ -47,7 +47,7 @@ logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 import os
-os.environ.setdefault("APP_ENV", "production")  # suppress SQLAlchemy echo
+os.environ.setdefault("SQL_ECHO", "false")  # suppress SQLAlchemy echo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

@@ -63,6 +63,13 @@ row in `failed_generations`.
 **Retries wrap every Ollama call** via `tenacity`: 3 attempts, exponential
 backoff.
 
+**A missing Ollama model fails silently.** `labeler.py` catches per cluster and
+`generator.py` writes each failure to `failed_generations`, so a model named in
+`OLLAMA_LLM_MODEL` but not installed lets the pipeline run for 20 minutes,
+produce zero stories, log "No knowledge stories generated", and send nothing.
+This is what stopped the pipeline for four months. Check `ollama list` first
+whenever briefings stop arriving.
+
 ## Things that are easy to get wrong
 
 **Dedup similarity thresholds are not free parameters.** Two outlets covering

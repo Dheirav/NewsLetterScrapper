@@ -2,29 +2,51 @@
 
 ## Hosting
 
-- [ ] **Migrate Postgres to Supabase** — create a free project at [supabase.com](https://supabase.com), enable the `vector` extension, then point `DATABASE_URL` at the Supabase connection string. Run `alembic upgrade head` once from the local machine to initialise the schema. Update `.env` on both the local pipeline machine and the Fly.io deployment.
+> **Fly.io is no longer free.** Free allowances were removed for new accounts in
+> October 2024; new signups get a trial of 2 VM hours or 7 days, then metered
+> billing. The smallest always-on machine is ~$2/month, realistically $5–25
+> once egress and an IP are counted. The plan below still works, it just costs
+> money now — see the alternatives before committing.
+>
+> **Genuinely free options for this stack:**
+> - **Oracle Cloud Always Free** — up to 4 ARM cores and 24 GB RAM, no expiry.
+>   Enough to host the API, Postgres *and* Ollama, which would take the whole
+>   pipeline off the laptop. Most setup effort, biggest payoff.
+> - **Render** — permanent free web tier, sleeps after 15 min idle. A ~50s cold
+>   start is fine for an unsubscribe link. Check the Postgres terms separately.
+> - **Koyeb** — no sleep, no card required. **Railway** — $5/month credit.
+>
+> Until something is deployed, unsubscribe works through the `mailto:` route in
+> the `List-Unsubscribe` header, which needs no hosting at all.
 
-- [ ] **Deploy API server to Fly.io** — install the `fly` CLI, run `fly launch` from the project root (Dockerfile is already production-ready, say NO to Fly's managed Postgres). Set secrets via `fly secrets set` (see below). Keep `min_machines_running = 1` in `fly.toml` so the server never sleeps.
+- [ ] **Migrate Postgres to Supabase** — create a free project at [supabase.com](https://supabase.com), enable the `vector` extension, then point `DATABASE_URL` at the Supabase connection string. Run `alembic upgrade head` once from the local machine to initialise the schema. Update `.env` on both the local pipeline machine and the deployed server.
+  - Note: migration `008` creates an HNSW index on `articles.embedding`. Confirm the Supabase plan's pgvector version is ≥ 0.5.0 before migrating.
 
-  **Secrets to set on Fly:**
+- [ ] **Deploy the API server** — the Dockerfile is production-ready. Whichever host you pick, remove the `--reload` flag and the source bind-mount from `docker-compose.yml` first.
+
+  **Environment to set on the host:**
   ```
-  DATABASE_URL      — Supabase connection string
-  APP_ENV           — production
-  PUBLIC_URL        — https://<app>.fly.dev
-  SMTP_USER         — denewsletter2005@gmail.com
-  SMTP_PASSWORD     — Gmail app password
-  RECIPIENT_EMAILS  — comma-separated recipients
-  UNSUBSCRIBE_SECRET — long random string
-  API_KEY           — long random string (locks down the API)
+  DATABASE_URL       — Supabase (or other managed Postgres) connection string
+  APP_ENV            — production
+  PUBLIC_URL         — https://<your-host>   (must be reachable; production
+                       refuses to start on a loopback value)
+  SMTP_USER          — sending address
+  SMTP_PASSWORD      — Gmail app password
+  RECIPIENT_EMAILS   — comma-separated recipients
+  UNSUBSCRIBE_SECRET — long random string, NOT the SMTP password
+  API_KEY            — long random string; required before exposing the server
   ```
 
-- [ ] **Update local `.env` for split deployment** — set `DATABASE_URL` to the Supabase URL and `PUBLIC_URL` to the Fly.io URL so unsubscribe links and "Read online" links in emails point to the live server.
+- [ ] **Update local `.env` for split deployment** — point `DATABASE_URL` at the managed Postgres and `PUBLIC_URL` at the deployed server, so unsubscribe and "read online" links in emails resolve for recipients rather than only on this machine.
 
-- [ ] **Remove `--reload` from production start command** — `fly.toml` / `Dockerfile` CMD should use `uvicorn apps.api.main:app --host 0.0.0.0 --port 8000` (no `--reload`).
+- [ ] **Strip development-only settings from the production start command** — remove `--reload` and the `.:/app` bind-mount from `docker-compose.yml`. `--reload` runs a file-watching supervisor that costs memory and restarts on any write.
 
 ## Sources
 
-- [x] **Add source metadata for ranking and balancing**
+- [x] **Add source metadata for ranking and balancing** — metadata is on every
+  article AND is now consumed: `adapter._score` scales each story by the mean
+  `weight` of its sources via `services/ingestion/source_catalog.py`, so news
+  outranks analysis outranks research at equal engagement.
 
   ### Goal
   Upgrade `sources.yaml` so the pipeline can distinguish between general news, analysis, and research sources, and control their influence during story ranking.
@@ -55,12 +77,35 @@
 
 ## Database Maintenance
 
-- [ ] **Delete unclustered articles** — `archive.py` only deletes articles belonging to old clusters (`cluster_id IN (...)`). Articles that never clustered (`cluster_id = NULL`) — paywall failures, singletons below `min_cluster_articles` — accumulate indefinitely. Add a second delete pass: `DELETE FROM articles WHERE cluster_id IS NULL AND created_at < cutoff`.
+- [x] **Delete unclustered articles** — `archive.py` now filters on `created_at`
+  rather than cluster membership, which is what finally reaches rows with
+  `cluster_id IS NULL`. There were 261 of them.
 
-- [ ] **VACUUM ANALYZE after archive** — PostgreSQL marks deleted rows as dead tuples but doesn't reclaim disk until `VACUUM` runs. Add `VACUUM ANALYZE articles, story_clusters, knowledge_stories` at the end of `archive.py` using a raw `asyncpg` connection (requires `AUTOCOMMIT` isolation — cannot run inside a transaction).
+- [x] **VACUUM ANALYZE after archive** — runs against `articles`,
+  `story_clusters`, `knowledge_stories` and `newsletters` under AUTOCOMMIT.
+  Skip with `--no-vacuum`.
 
-- [ ] **Strip old newsletter HTML** — `newsletters` table grows ~150 KB/day (full rendered HTML) and is never touched by the archive. For newsletters older than `ARCHIVE_KEEP_DAYS`, null out `html_content` while keeping the metadata row. The newsletter can be re-rendered on demand via `send_newsletter.py` if ever needed.
+- [x] **Strip old newsletter HTML** — `html_content` is emptied past the article
+  window; the metadata row is kept and never deleted. Re-render with
+  `send_newsletter.py --rerender`.
 
-- [ ] **Schedule archive in cron installer** — `install_cron.sh` only schedules `run_pipeline.py`. Add a second weekly cron entry (e.g. Sunday 03:00) that runs `scripts/archive.py` automatically. Controlled by `ARCHIVE_KEEP_DAYS` in `.env` (default 90).
+- [x] **Schedule archive in cron installer** — added to both the cron and
+  systemd paths, weekly on Sunday at 03:00. It runs `--dry-run` and only
+  reports to `logs/archive.log`; deletion stays a manual step.
 
-- [ ] **Tiered retention** — add two separate config keys: `ARCHIVE_KEEP_ARTICLES_DAYS` (default 90, controls raw text + embeddings) and `ARCHIVE_KEEP_STORIES_DAYS` (default 365, controls knowledge stories + newsletter metadata). This keeps useful long-term history without paying the storage cost of embeddings.
+- [x] **Tiered retention** — `ARCHIVE_KEEP_ARTICLES_DAYS` (90) and
+  `ARCHIVE_KEEP_STORIES_DAYS` (365). `ARCHIVE_KEEP_DAYS` still works and seeds
+  the article window.
+
+- [ ] **Make crash recovery actually resume** — `pipeline_runs` rows are written
+  by every durable step but only step 5 reads them. The expensive step (9,
+  knowledge generation) relies instead on skipping clusters that already have a
+  saved story — and that check cannot work across a restart, because
+  `clusterer.py` mints fresh `uuid4` cluster IDs on every run, so re-clustered
+  articles never match the stored ones. Fix by deriving cluster IDs from
+  content, or by reloading the run's clusters from the database when
+  `save_clusters` is already recorded for today.
+
+- [ ] **Drop the duplicate URL index** — `articles` carries both
+  `articles_url_key` and `ix_articles_url`, two unique btree indexes on the
+  same column. One is redundant write cost on every insert.

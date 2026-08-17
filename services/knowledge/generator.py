@@ -19,10 +19,12 @@ Usage:
     from services.knowledge.generator import generate_knowledge_stories
 
     # Fast daily run (default)
-    stories = await generate_knowledge_stories(clusters, session)
+    stories = await generate_knowledge_stories(clusters, session, run_date=today)
 
     # In-depth weekly run
-    stories = await generate_knowledge_stories(clusters, session, mode="detailed")
+    stories = await generate_knowledge_stories(
+        clusters, session, run_date=today, mode="detailed"
+    )
 """
 import asyncio
 import json
@@ -244,6 +246,7 @@ async def _generate_one_detailed(cluster: StoryCluster) -> KnowledgeStory | None
 async def generate_knowledge_stories(
     clusters: List[StoryCluster],
     session: AsyncSession,
+    run_date: date,
     max_concurrent: int = 5,
     mode: Literal["concise", "detailed"] = "concise",
 ) -> List[KnowledgeStory]:
@@ -253,6 +256,10 @@ async def generate_knowledge_stories(
 
     mode="concise"  — one JSON call per cluster (default, fast daily use)
     mode="detailed" — five focused calls per cluster (richer output, ~5× slower)
+
+    ``run_date`` is the date the pipeline run started. It stamps both the saved
+    stories and any dead-letter rows, so a run that crosses midnight keeps all
+    of its output on one date instead of splitting across two.
 
     Limits concurrent Ollama calls to avoid overloading local inference.
     """
@@ -301,12 +308,11 @@ async def generate_knowledge_stories(
 
     pairs = await asyncio.gather(*[guarded(c) for c in clusters])
     stories: list[KnowledgeStory] = []
-    run_date = date.today()
 
     # Persist sequentially — AsyncSession must not be accessed from concurrent coroutines
     for cluster, story in pairs:
         if story is not None:
-            await save_knowledge_story(story, session)
+            await save_knowledge_story(story, session, run_date)
             stories.append(story)
         else:
             # Dead-letter: record the failed cluster for manual inspection/retry

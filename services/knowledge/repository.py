@@ -5,7 +5,7 @@ Persist KnowledgeStory objects to the database.
 
 Usage:
     from services.knowledge.repository import save_knowledge_story
-    await save_knowledge_story(story, session)
+    await save_knowledge_story(story, session, run_date=today)
 """
 import logging
 from datetime import date
@@ -23,18 +23,26 @@ log = logging.getLogger(__name__)
 async def save_knowledge_story(
     story: KnowledgeStory,
     session: AsyncSession,
+    run_date: date,
 ) -> KnowledgeStoryORM:
     """Insert or update a KnowledgeStory (upsert by cluster_id).
-    
+
     Safe to call on re-runs: if a row for this cluster already exists it will
     be updated rather than raising an IntegrityError.
+
+    ``run_date`` is required rather than defaulting to ``date.today()``. The
+    pipeline stamps the newsletter with the date captured when the run started,
+    and a run beginning at 23:50 finishes after midnight — re-reading the clock
+    here filed the stories one day ahead of their own newsletter, so
+    ``get_stories_for_date`` found nothing and ``send_newsletter --rerender``
+    exited 1 on exactly the runs worth re-sending.
     """
     result = await session.execute(
         select(KnowledgeStoryORM).where(KnowledgeStoryORM.cluster_id == story.cluster_id)
     )
     orm = result.scalar_one_or_none()
     if orm is None:
-        orm = KnowledgeStoryORM(cluster_id=story.cluster_id, story_date=date.today())
+        orm = KnowledgeStoryORM(cluster_id=story.cluster_id, story_date=run_date)
         session.add(orm)
     orm.topic_label = story.topic_label
     orm.executive_summary = story.executive_summary

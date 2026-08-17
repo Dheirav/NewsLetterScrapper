@@ -5,7 +5,7 @@ Persist story clusters (and update article cluster_id assignments) to the DB.
 
 Usage:
     from services.understanding.repository import save_clusters
-    await save_clusters(clusters, session)
+    await save_clusters(clusters, session, run_date=today)
 """
 import logging
 from datetime import date, datetime, timezone
@@ -21,17 +21,21 @@ log = logging.getLogger(__name__)
 
 
 async def save_clusters(
-    clusters: List[StoryCluster], session: AsyncSession
+    clusters: List[StoryCluster], session: AsyncSession, run_date: date
 ) -> None:
     """
     For each cluster:
       1. Insert a StoryClusterORM row
       2. Update the cluster_id on each ArticleORM row
+
+    ``run_date`` is required rather than defaulting to ``date.today()`` so that
+    clusters, stories and the newsletter all carry the date the run started.
+    A pipeline that crosses midnight would otherwise split one run's output
+    across two dates, and cluster_date drives both the archive cutoff and the
+    graph explorer's time window.
     """
     if not clusters:
         return
-
-    today = date.today()
 
     for cluster in clusters:
         existing = await session.execute(
@@ -41,7 +45,7 @@ async def save_clusters(
         if orm_cluster is None:
             orm_cluster = StoryClusterORM(
                 cluster_id=cluster.cluster_id,
-                cluster_date=today,
+                cluster_date=run_date,
                 created_at=datetime.now(tz=timezone.utc),
             )
             session.add(orm_cluster)

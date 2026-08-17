@@ -21,13 +21,20 @@ from typing import List
 import numpy as np
 from hdbscan import HDBSCAN
 
+from core.config import settings
 from core.schemas.models import Article, StoryCluster
 
 log = logging.getLogger(__name__)
 
 # Minimum number of articles to form a multi-article cluster.
 # Articles that don't fit any cluster become singleton clusters.
-MIN_CLUSTER_SIZE = 2
+#
+# Derived from settings so it cannot drift from the threshold that gates
+# knowledge generation: generate_knowledge_stories() discards every cluster
+# smaller than settings.min_cluster_articles, so a hardcoded value here would
+# silently build clusters that are all thrown away downstream.
+# HDBSCAN itself requires >= 2.
+MIN_CLUSTER_SIZE = max(2, settings.min_cluster_articles)
 
 
 def _cluster_articles_sync(articles: List[Article]) -> List[StoryCluster]:

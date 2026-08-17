@@ -8,6 +8,7 @@
 #   ./scripts/install_cron.sh --time 07:30  # custom time (HH:MM, 24h)
 #   ./scripts/install_cron.sh --systemd    # install systemd .service + .timer
 #                                          # instead of cron (requires sudo)
+#   ./scripts/install_cron.sh --uninstall   # remove every entry this installed
 #   ./scripts/install_cron.sh --no-backup  # skip the daily database dump
 #   ./scripts/install_cron.sh --no-archive # skip the weekly retention report
 #
@@ -45,6 +46,7 @@ BACKUP_HOUR="07"       # after the pipeline has finished writing
 USE_SYSTEMD=false
 WITH_ARCHIVE=true
 WITH_BACKUP=true
+DO_UNINSTALL=false
 
 # ── Parse arguments ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -63,6 +65,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-backup)
       WITH_BACKUP=false
+      shift
+      ;;
+    --uninstall)
+      DO_UNINSTALL=true
       shift
       ;;
     *)
@@ -121,8 +127,30 @@ install_cron() {
     echo "               dumps to ~/briefing-backups, keeping the newest 14"
   fi
   echo ""
-  echo "To check:  crontab -l | grep intelligence"
-  echo "To remove: crontab -l | grep -v intelligence-briefing | crontab -"
+  echo "To check:  crontab -l | grep -E 'intelligence|run_pipeline|archive.py|backup_db'"
+  echo "To remove: ./scripts/install_cron.sh --uninstall"
+}
+
+# ── Uninstall ────────────────────────────────────────────────────────────────
+uninstall_cron() {
+  # Must match the COMMAND lines, not just the marker comments. The marker
+  # appears only on the comment above each entry, so filtering on it alone
+  # strips the labels and leaves all three jobs running — unlabelled, and
+  # therefore harder to find next time.
+  { crontab -l 2>/dev/null \
+      | grep -v "# intelligence-briefing" \
+      | grep -v "run_pipeline.py" \
+      | grep -v "archive.py" \
+      | grep -v "backup_db.sh"; } | crontab - || true
+
+  local left
+  left="$(crontab -l 2>/dev/null | grep -cE 'run_pipeline\.py|archive\.py|backup_db\.sh' || true)"
+  if [[ "${left:-0}" -eq 0 ]]; then
+    echo "Cron entries removed. Other crontab entries were left untouched."
+  else
+    echo "warning: ${left} briefing entr(y|ies) still present — check 'crontab -l'" >&2
+    exit 1
+  fi
 }
 
 # ── Systemd install ──────────────────────────────────────────────────────────
@@ -253,6 +281,11 @@ EOF
 }
 
 # ── Run ──────────────────────────────────────────────────────────────────────
+if [[ "${DO_UNINSTALL}" == true ]]; then
+  uninstall_cron
+  exit 0
+fi
+
 if [[ "${USE_SYSTEMD}" == true ]]; then
   if [[ "${EUID}" -ne 0 ]]; then
     echo "Systemd install requires sudo: sudo $0 --systemd"

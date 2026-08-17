@@ -19,6 +19,7 @@ from typing import List
 
 from core.schemas.models import KnowledgeStory, UserProfile
 from core.utils import slugify
+from services.ingestion.source_catalog import mean_source_weight
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,18 @@ def adapt_newsletter(
         personal_weight = profile.topic_weights.get(slug, 0.0)
         # Bonus for global-awareness stories (many cross-confirming sources)
         global_bonus = 0.2 if story.source_count >= GLOBAL_AWARENESS_MIN_SOURCES else 0.0
-        return personal_weight + global_bonus
+
+        # Scale by the kind of outlet backing the story. sources.yaml grades
+        # news above analysis above research (1.0 / 0.7 / 0.4 at tier 1), so a
+        # piece carried only by research blogs ranks below equally-engaging wire
+        # coverage — research acts as supporting context, which is what the
+        # weights were added for.
+        #
+        # Multiplicative rather than additive: the weight expresses "how much
+        # influence this source should have", which is a proportion of the
+        # score, not a fixed offset that would dominate small personal weights.
+        weight = mean_source_weight(story.article_sources)
+        return (personal_weight + global_bonus) * weight
 
     # Sort: highest-scoring stories first
     ordered = sorted(stories, key=_score, reverse=True)

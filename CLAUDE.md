@@ -66,9 +66,9 @@ backoff.
 **A missing Ollama model fails silently.** `labeler.py` catches per cluster and
 `generator.py` writes each failure to `failed_generations`, so a model named in
 `OLLAMA_LLM_MODEL` but not installed lets the pipeline run for 20 minutes,
-produce zero stories, log "No knowledge stories generated", and send nothing.
-This is what stopped the pipeline for four months. Check `ollama list` first
-whenever briefings stop arriving.
+produce zero stories, log "No knowledge stories generated -- aborting
+assembly", and send nothing — no traceback, exit code 0. Check `ollama list`
+against `OLLAMA_LLM_MODEL` first whenever a run completes without an email.
 
 ## Things that are easy to get wrong
 

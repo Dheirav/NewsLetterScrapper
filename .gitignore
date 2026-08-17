@@ -57,3 +57,7 @@ htmlcov/
 # Timestamped .env backups (contain secrets)
 .env.*
 !.env.example
+
+# Local database dumps (default target is ~/briefing-backups, outside the repo)
+briefing-backups/
+*.sql.gz

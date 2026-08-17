@@ -92,19 +92,23 @@ async def patch_story(
     values: Dict[str, Any] = {k: v for k, v in raw.items() if v is not None}
     if not values:
         raise HTTPException(status_code=400, detail="No fields to update")
-    await db.execute(
+    result = await db.execute(
         update(KnowledgeStoryORM)
         .where(KnowledgeStoryORM.id == story_id)
         .values(**values)
     )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Story not found")
     await db.commit()
     return {"updated": story_id}
 
 
 @router.delete("/{story_id}", summary="Delete knowledge story")
 async def delete_story(story_id: int, db: AsyncSession = Depends(get_db)):
-    await db.execute(
+    result = await db.execute(
         delete(KnowledgeStoryORM).where(KnowledgeStoryORM.id == story_id)
     )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Story not found")
     await db.commit()
     return {"deleted": story_id}

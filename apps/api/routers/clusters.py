@@ -86,11 +86,13 @@ async def patch_cluster(
     values = {k: v for k, v in body.model_dump().items() if v is not None}
     if not values:
         raise HTTPException(status_code=400, detail="No fields to update")
-    await db.execute(
+    result = await db.execute(
         update(StoryClusterORM)
         .where(StoryClusterORM.cluster_id == cluster_id)
         .values(**values)
     )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Cluster not found")
     await db.commit()
     return {"updated": cluster_id}
 
@@ -106,8 +108,10 @@ async def delete_cluster(cluster_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(
         delete(KnowledgeStoryORM).where(KnowledgeStoryORM.cluster_id == cluster_id)
     )
-    await db.execute(
+    result = await db.execute(
         delete(StoryClusterORM).where(StoryClusterORM.cluster_id == cluster_id)
     )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Cluster not found")
     await db.commit()
     return {"deleted": cluster_id}

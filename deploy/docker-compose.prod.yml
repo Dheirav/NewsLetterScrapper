@@ -1,0 +1,106 @@
+# deploy/docker-compose.prod.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Complete production stack. Standalone — do NOT combine with the dev file:
+#
+#   docker compose -f deploy/docker-compose.prod.yml up -d
+#
+# Deliberately a full file rather than an overlay. Compose merges `ports` and
+# `volumes` by appending, so removing the dev port publishing and the source
+# bind-mount would need the `!override` tag (Compose >= 2.24). Duplicating ~60
+# lines is cheaper than a deployment that silently keeps exposing Postgres
+# because the host's Compose was a version too old to honour the tag.
+#
+# Differences from the dev stack, each load-bearing:
+#   * db and ollama publish no ports. The dev file binds both to 0.0.0.0; on a
+#     public VM that is an unauthenticated Postgres and an unauthenticated LLM
+#     open to the internet. The app reaches them over the compose network.
+#   * No source bind-mount, no --reload.
+#   * Memory limits, so an unbounded Ollama cannot starve Postgres on a 12 GB box.
+#   * Caddy terminates TLS. A real HTTPS origin is what enables RFC 8058
+#     one-click unsubscribe; without it only the mailto: route is offered.
+#   * Ollama pulls the model named in .env rather than a hardcoded one.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: briefing
+
+services:
+
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-intelligence_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1g
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    entrypoint: >
+      /bin/sh -c "
+        ollama serve &
+        sleep 5 &&
+        ollama pull ${OLLAMA_LLM_MODEL:-llama3} &&
+        ollama pull ${OLLAMA_EMBED_MODEL:-nomic-embed-text} &&
+        wait
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s     # first boot downloads ~5 GB of model weights
+    mem_limit: 8g
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+      ollama: {condition: service_started}
+    env_file: ../.env
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-intelligence_db}
+      OLLAMA_BASE_URL: http://ollama:11434
+    command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    mem_limit: 1g
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 256m
+
+volumes:
+  postgres_data:
+  ollama_models:
+  caddy_data:
+  caddy_config:

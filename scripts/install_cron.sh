@@ -9,6 +9,8 @@
 #   ./scripts/install_cron.sh --systemd    # install systemd .service + .timer
 #                                          # instead of cron (requires sudo)
 #   ./scripts/install_cron.sh --uninstall   # remove every entry this installed
+#   ./scripts/install_cron.sh --docker      # run inside the compose stack
+#   ./scripts/install_cron.sh --time 12:00 --tz Asia/Kolkata   # named timezone
 #   ./scripts/install_cron.sh --no-backup  # skip the daily database dump
 #   ./scripts/install_cron.sh --no-archive # skip the weekly retention report
 #
@@ -44,6 +46,7 @@ ARCHIVE_DAY="0"        # Sunday
 ARCHIVE_HOUR="03"
 BACKUP_HOUR=""         # defaults to one hour after the pipeline
 SCHED_TZ=""            # interpret --time in this zone, converting to local
+USE_DOCKER=false        # run the pipeline inside the compose stack
 USE_SYSTEMD=false
 WITH_ARCHIVE=true
 WITH_BACKUP=true
@@ -79,6 +82,10 @@ while [[ $# -gt 0 ]]; do
     --backup-time)
       BACKUP_HOUR="${2%%:*}"
       shift 2
+      ;;
+    --docker)
+      USE_DOCKER=true
+      shift
       ;;
     *)
       echo "Unknown argument: $1"
@@ -132,13 +139,28 @@ install_cron() {
   mkdir -p "${LOG_DIR}"
 
   local marker="# intelligence-briefing"
-  local pipeline_cmd="${MINUTE} ${HOUR} * * * cd '${REPO_DIR}' && '${PYTHON}' scripts/run_pipeline.py >> '${LOG_DIR}/pipeline.log' 2>&1"
+
+  # In a containerised deployment the interpreter lives inside the app service,
+  # so the host schedule drives `docker compose exec` instead of a local venv.
+  local RUN ARCHIVE_RUN
+  if [[ "${USE_DOCKER}" == true ]]; then
+    local DC="docker compose -f deploy/docker-compose.prod.yml"
+    RUN="${DC} exec -T app python scripts/run_pipeline.py"
+    ARCHIVE_RUN="${DC} exec -T app python scripts/archive.py --dry-run"
+    BACKUP_RUN="./scripts/backup_db.sh --docker"
+  else
+    RUN="'${PYTHON}' scripts/run_pipeline.py"
+    ARCHIVE_RUN="'${PYTHON}' scripts/archive.py --dry-run"
+    BACKUP_RUN="./scripts/backup_db.sh"
+  fi
+
+  local pipeline_cmd="${MINUTE} ${HOUR} * * * cd '${REPO_DIR}' && ${RUN} >> '${LOG_DIR}/pipeline.log' 2>&1"
   # Weekly, and never unattended-destructive: --dry-run reports what would be
   # removed so the retention windows can be reviewed before anything is deleted.
-  local archive_cmd="0 ${ARCHIVE_HOUR} * * ${ARCHIVE_DAY} cd '${REPO_DIR}' && '${PYTHON}' scripts/archive.py --dry-run >> '${LOG_DIR}/archive.log' 2>&1"
+  local archive_cmd="0 ${ARCHIVE_HOUR} * * ${ARCHIVE_DAY} cd '${REPO_DIR}' && ${ARCHIVE_RUN} >> '${LOG_DIR}/archive.log' 2>&1"
   # Daily, an hour after the pipeline starts. Knowledge stories cost a local
   # LLM call each and cannot be regenerated once their source articles age out.
-  local backup_cmd="${BACKUP_MINUTE} ${BACKUP_HOUR} * * * cd '${REPO_DIR}' && ./scripts/backup_db.sh >> '${LOG_DIR}/backup.log' 2>&1"
+  local backup_cmd="${BACKUP_MINUTE} ${BACKUP_HOUR} * * * cd '${REPO_DIR}' && ${BACKUP_RUN} >> '${LOG_DIR}/backup.log' 2>&1"
 
   # `|| true` is load-bearing under `set -euo pipefail`: `crontab -l` exits 1
   # when the user has no crontab yet, and each `grep -v` exits 1 when it filters

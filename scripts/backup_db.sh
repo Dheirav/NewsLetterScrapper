@@ -7,6 +7,7 @@
 #   ./scripts/backup_db.sh                  # dump to ~/briefing-backups
 #   ./scripts/backup_db.sh --dir /mnt/nas   # somewhere else
 #   ./scripts/backup_db.sh --keep 30        # retain 30 dumps instead of 14
+#   ./scripts/backup_db.sh --docker         # dump from inside the compose stack
 #
 # The knowledge stories are the expensive artefact here: each one costs a local
 # LLM call and cannot be regenerated once the source articles age out, so this
@@ -17,25 +18,38 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-${HOME}/briefing-backups}"
 KEEP="${KEEP:-14}"
+USE_DOCKER=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dir)  BACKUP_DIR="$2"; shift 2 ;;
-    --keep) KEEP="$2";       shift 2 ;;
+    --dir)    BACKUP_DIR="$2"; shift 2 ;;
+    --keep)   KEEP="$2";       shift 2 ;;
+    --docker) USE_DOCKER=true; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
 if [[ ! -f "${REPO_DIR}/.env" ]]; then
-  echo "error: ${REPO_DIR}/.env not found — cannot read DATABASE_URL" >&2
+  echo "error: ${REPO_DIR}/.env not found" >&2
   exit 1
 fi
 
-# asyncpg's driver prefix is not understood by libpq.
-DB_URL="$(grep '^DATABASE_URL=' "${REPO_DIR}/.env" | cut -d= -f2- | sed 's|postgresql+asyncpg|postgresql|')"
-if [[ -z "${DB_URL}" ]]; then
-  echo "error: DATABASE_URL is empty in ${REPO_DIR}/.env" >&2
-  exit 1
+# In a containerised deployment DATABASE_URL names the compose service host
+# (db:5432), which does not resolve from the host — a host-side pg_dump would
+# fail every night. --docker runs pg_dump inside the db container instead, and
+# does not require pg_dump to be installed on the host at all.
+if [[ "${USE_DOCKER}" == true ]]; then
+  DUMP_CMD=(docker compose -f "${REPO_DIR}/deploy/docker-compose.prod.yml" exec -T db
+            pg_dump -U "$(grep -E '^POSTGRES_USER=' "${REPO_DIR}/.env" | cut -d= -f2- || echo postgres)"
+                    "$(grep -E '^POSTGRES_DB=' "${REPO_DIR}/.env" | cut -d= -f2- || echo intelligence_db)")
+else
+  # asyncpg's driver prefix is not understood by libpq.
+  DB_URL="$(grep '^DATABASE_URL=' "${REPO_DIR}/.env" | cut -d= -f2- | sed 's|postgresql+asyncpg|postgresql|')"
+  if [[ -z "${DB_URL}" ]]; then
+    echo "error: DATABASE_URL is empty in ${REPO_DIR}/.env" >&2
+    exit 1
+  fi
+  DUMP_CMD=(pg_dump "${DB_URL}")
 fi
 
 mkdir -p "${BACKUP_DIR}"
@@ -47,7 +61,7 @@ TARGET="${BACKUP_DIR}/intelligence_db-${STAMP}.sql.gz"
 TMP="${TARGET}.partial"
 trap 'rm -f "${TMP}"' EXIT
 
-if ! pg_dump "${DB_URL}" | gzip > "${TMP}"; then
+if ! "${DUMP_CMD[@]}" | gzip > "${TMP}"; then
   echo "error: pg_dump failed — keeping existing backups untouched" >&2
   exit 1
 fi

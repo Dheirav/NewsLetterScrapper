@@ -1,0 +1,7 @@
+# Caddy obtains and renews a Let's Encrypt certificate automatically for
+# SITE_ADDRESS. Everything is proxied to the app container; the API's own
+# default-deny key check decides what is public, so nothing extra is needed here.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy app:8000
+}

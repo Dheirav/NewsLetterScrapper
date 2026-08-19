@@ -42,7 +42,8 @@ HOUR="06"
 MINUTE="00"
 ARCHIVE_DAY="0"        # Sunday
 ARCHIVE_HOUR="03"
-BACKUP_HOUR="07"       # after the pipeline has finished writing
+BACKUP_HOUR=""         # defaults to one hour after the pipeline
+SCHED_TZ=""            # interpret --time in this zone, converting to local
 USE_SYSTEMD=false
 WITH_ARCHIVE=true
 WITH_BACKUP=true
@@ -71,12 +72,60 @@ while [[ $# -gt 0 ]]; do
       DO_UNINSTALL=true
       shift
       ;;
+    --tz)
+      SCHED_TZ="$2"
+      shift 2
+      ;;
+    --backup-time)
+      BACKUP_HOUR="${2%%:*}"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
       ;;
   esac
 done
+
+# Debian/Ubuntu ship vixie cron 3.0pl1, which does NOT implement CRON_TZ — that
+# is a cronie extension. Writing CRON_TZ into the crontab there sets a harmless
+# environment variable for the job and changes nothing about when it fires, so
+# the schedule silently lands at the wrong hour. Convert to local time instead
+# and record both in a comment.
+ORIG_TIME="${HOUR}:${MINUTE}"
+if [[ -n "${SCHED_TZ}" ]]; then
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "error: --tz needs python3 to convert ${SCHED_TZ} into local time" >&2
+    exit 1
+  fi
+  CONVERTED="$(python3 - "$SCHED_TZ" "$HOUR" "$MINUTE" <<'PYEOF'
+import sys
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+tz, hh, mm = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+try:
+    src = ZoneInfo(tz)
+except Exception:
+    sys.exit(f"unknown timezone: {tz}")
+# Use tomorrow so the conversion reflects the offset in effect when it next runs.
+day = (datetime.now().date() + timedelta(days=1))
+local = datetime(day.year, day.month, day.day, hh, mm, tzinfo=src).astimezone()
+print(local.strftime("%H %M"))
+PYEOF
+)" || { echo "error: timezone conversion failed" >&2; exit 1; }
+  HOUR="${CONVERTED%% *}"
+  MINUTE="${CONVERTED##* }"
+fi
+
+# The backup must land AFTER the pipeline, or it captures the previous day's
+# state. Deriving it from the pipeline hour means moving --time cannot silently
+# invert the two.
+if [[ -z "${BACKUP_HOUR}" ]]; then
+  BACKUP_HOUR="$(printf '%02d' $(( (10#${HOUR} + 1) % 24 )))"
+  BACKUP_MINUTE="${MINUTE}"
+else
+  BACKUP_MINUTE="00"
+fi
 
 # ── Cron install ─────────────────────────────────────────────────────────────
 install_cron() {
@@ -89,7 +138,7 @@ install_cron() {
   local archive_cmd="0 ${ARCHIVE_HOUR} * * ${ARCHIVE_DAY} cd '${REPO_DIR}' && '${PYTHON}' scripts/archive.py --dry-run >> '${LOG_DIR}/archive.log' 2>&1"
   # Daily, an hour after the pipeline starts. Knowledge stories cost a local
   # LLM call each and cannot be regenerated once their source articles age out.
-  local backup_cmd="0 ${BACKUP_HOUR} * * * cd '${REPO_DIR}' && ./scripts/backup_db.sh >> '${LOG_DIR}/backup.log' 2>&1"
+  local backup_cmd="${BACKUP_MINUTE} ${BACKUP_HOUR} * * * cd '${REPO_DIR}' && ./scripts/backup_db.sh >> '${LOG_DIR}/backup.log' 2>&1"
 
   # `|| true` is load-bearing under `set -euo pipefail`: `crontab -l` exits 1
   # when the user has no crontab yet, and each `grep -v` exits 1 when it filters
@@ -100,7 +149,11 @@ install_cron() {
         | grep -v "${marker}" \
         | grep -v "run_pipeline.py" \
         | grep -v "archive.py" \
-        | grep -v "backup_db.sh"; } || true
+        | grep -v "backup_db.sh" \
+        | grep -v "^CRON_TZ="; } || true
+    if [[ -n "${SCHED_TZ}" ]]; then
+      echo "${marker} ${ORIG_TIME} ${SCHED_TZ} = ${HOUR}:${MINUTE} $(date +%Z) (converted; this cron has no CRON_TZ)"
+    fi
     echo "${marker} daily pipeline"
     echo "${pipeline_cmd}"
     if [[ "${WITH_ARCHIVE}" == true ]]; then
@@ -115,6 +168,11 @@ install_cron() {
 
   echo "Cron installed."
   echo "  Interpreter: ${PYTHON}"
+  if [[ -n "${SCHED_TZ}" ]]; then
+    echo "  Requested:   ${ORIG_TIME} ${SCHED_TZ}"
+    echo "  Converted:   ${HOUR}:${MINUTE} $(date +%Z) — cron uses local time and"
+    echo "               this build has no CRON_TZ support"
+  fi
   echo "  Pipeline:    daily at ${HOUR}:${MINUTE}   -> ${LOG_DIR}/pipeline.log"
   if [[ "${WITH_ARCHIVE}" == true ]]; then
     echo "  Archive:     Sundays at ${ARCHIVE_HOUR}:00 (DRY RUN) -> ${LOG_DIR}/archive.log"
@@ -123,7 +181,7 @@ install_cron() {
     echo "  'python scripts/archive.py' by hand to actually reclaim space."
   fi
   if [[ "${WITH_BACKUP}" == true ]]; then
-    echo "  Backup:      daily at ${BACKUP_HOUR}:00 -> ${LOG_DIR}/backup.log"
+    echo "  Backup:      daily at ${BACKUP_HOUR}:${BACKUP_MINUTE} -> ${LOG_DIR}/backup.log"
     echo "               dumps to ~/briefing-backups, keeping the newest 14"
   fi
   echo ""
@@ -141,7 +199,8 @@ uninstall_cron() {
       | grep -v "# intelligence-briefing" \
       | grep -v "run_pipeline.py" \
       | grep -v "archive.py" \
-      | grep -v "backup_db.sh"; } | crontab - || true
+      | grep -v "backup_db.sh" \
+      | grep -v "^CRON_TZ="; } | crontab - || true
 
   local left
   left="$(crontab -l 2>/dev/null | grep -cE 'run_pipeline\.py|archive\.py|backup_db\.sh' || true)"
@@ -242,7 +301,7 @@ Description=Daily Intelligence Briefing database backup
 Requires=${SERVICE_NAME}-backup.service
 
 [Timer]
-OnCalendar=*-*-* ${BACKUP_HOUR}:00:00
+OnCalendar=*-*-* ${BACKUP_HOUR}:${BACKUP_MINUTE}:00
 Persistent=true
 
 [Install]
@@ -271,7 +330,7 @@ EOF
     echo "  Archive:     Sundays at ${ARCHIVE_HOUR}:00 (DRY RUN, reports to journal)"
   fi
   if [[ "${WITH_BACKUP}" == true ]]; then
-    echo "  Backup:      daily at ${BACKUP_HOUR}:00 -> ~/briefing-backups"
+    echo "  Backup:      daily at ${BACKUP_HOUR}:${BACKUP_MINUTE} -> ~/briefing-backups"
   fi
   echo ""
   echo "Check status:    systemctl status ${SERVICE_NAME}.timer"

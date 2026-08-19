@@ -47,6 +47,7 @@ ARCHIVE_HOUR="03"
 BACKUP_HOUR=""         # defaults to one hour after the pipeline
 SCHED_TZ=""            # interpret --time in this zone, converting to local
 USE_DOCKER=false        # run the pipeline inside the compose stack
+WITH_HEALTHCHECK=true   # alert when a day produces no briefing
 USE_SYSTEMD=false
 WITH_ARCHIVE=true
 WITH_BACKUP=true
@@ -85,6 +86,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --docker)
       USE_DOCKER=true
+      shift
+      ;;
+    --no-healthcheck)
+      WITH_HEALTHCHECK=false
       shift
       ;;
     *)
@@ -127,6 +132,8 @@ fi
 # The backup must land AFTER the pipeline, or it captures the previous day's
 # state. Deriving it from the pipeline hour means moving --time cannot silently
 # invert the two.
+HEALTH_HOUR="$(printf '%02d' $(( (10#${HOUR} + 2) % 24 )))"
+
 if [[ -z "${BACKUP_HOUR}" ]]; then
   BACKUP_HOUR="$(printf '%02d' $(( (10#${HOUR} + 1) % 24 )))"
   BACKUP_MINUTE="${MINUTE}"
@@ -148,10 +155,12 @@ install_cron() {
     RUN="${DC} exec -T app python scripts/run_pipeline.py"
     ARCHIVE_RUN="${DC} exec -T app python scripts/archive.py --dry-run"
     BACKUP_RUN="./scripts/backup_db.sh --docker"
+    HEALTH_RUN="${DC} exec -T app python scripts/healthcheck.py"
   else
     RUN="'${PYTHON}' scripts/run_pipeline.py"
     ARCHIVE_RUN="'${PYTHON}' scripts/archive.py --dry-run"
     BACKUP_RUN="./scripts/backup_db.sh"
+    HEALTH_RUN="'${PYTHON}' scripts/healthcheck.py"
   fi
 
   local pipeline_cmd="${MINUTE} ${HOUR} * * * cd '${REPO_DIR}' && ${RUN} >> '${LOG_DIR}/pipeline.log' 2>&1"
@@ -161,6 +170,8 @@ install_cron() {
   # Daily, an hour after the pipeline starts. Knowledge stories cost a local
   # LLM call each and cannot be regenerated once their source articles age out.
   local backup_cmd="${BACKUP_MINUTE} ${BACKUP_HOUR} * * * cd '${REPO_DIR}' && ${BACKUP_RUN} >> '${LOG_DIR}/backup.log' 2>&1"
+
+  local health_cmd="${MINUTE} ${HEALTH_HOUR} * * * cd '${REPO_DIR}' && ${HEALTH_RUN} >> '${LOG_DIR}/healthcheck.log' 2>&1"
 
   # `|| true` is load-bearing under `set -euo pipefail`: `crontab -l` exits 1
   # when the user has no crontab yet, and each `grep -v` exits 1 when it filters
@@ -172,6 +183,7 @@ install_cron() {
         | grep -v "run_pipeline.py" \
         | grep -v "archive.py" \
         | grep -v "backup_db.sh" \
+        | grep -v "healthcheck.py" \
         | grep -v "^CRON_TZ="; } || true
     if [[ -n "${SCHED_TZ}" ]]; then
       echo "${marker} ${ORIG_TIME} ${SCHED_TZ} = ${HOUR}:${MINUTE} $(date +%Z) (converted; this cron has no CRON_TZ)"
@@ -185,6 +197,10 @@ install_cron() {
     if [[ "${WITH_BACKUP}" == true ]]; then
       echo "${marker} daily database backup"
       echo "${backup_cmd}"
+    fi
+    if [[ "${WITH_HEALTHCHECK}" == true ]]; then
+      echo "${marker} daily health check"
+      echo "${health_cmd}"
     fi
   } | crontab -
 
@@ -206,6 +222,10 @@ install_cron() {
     echo "  Backup:      daily at ${BACKUP_HOUR}:${BACKUP_MINUTE} -> ${LOG_DIR}/backup.log"
     echo "               dumps to ~/briefing-backups, keeping the newest 14"
   fi
+  if [[ "${WITH_HEALTHCHECK}" == true ]]; then
+    echo "  Health:      daily at ${HEALTH_HOUR}:${MINUTE} -> ${LOG_DIR}/healthcheck.log"
+    echo "               emails ${ALERT_TO:-the operator} only when a briefing is missing"
+  fi
   echo ""
   echo "To check:  crontab -l | grep -E 'intelligence|run_pipeline|archive.py|backup_db'"
   echo "To remove: ./scripts/install_cron.sh --uninstall"
@@ -222,10 +242,11 @@ uninstall_cron() {
       | grep -v "run_pipeline.py" \
       | grep -v "archive.py" \
       | grep -v "backup_db.sh" \
+      | grep -v "healthcheck.py" \
       | grep -v "^CRON_TZ="; } | crontab - || true
 
   local left
-  left="$(crontab -l 2>/dev/null | grep -cE 'run_pipeline\.py|archive\.py|backup_db\.sh' || true)"
+  left="$(crontab -l 2>/dev/null | grep -cE 'run_pipeline\.py|archive\.py|backup_db\.sh|healthcheck\.py' || true)"
   if [[ "${left:-0}" -eq 0 ]]; then
     echo "Cron entries removed. Other crontab entries were left untouched."
   else

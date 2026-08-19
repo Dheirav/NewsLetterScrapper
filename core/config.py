@@ -114,6 +114,17 @@ class Settings(BaseSettings):
     # Example: API_KEY=supersecrettoken
     api_key: str = Field(default="")
 
+    # ── Alerting ──────────────────────────────────────────────────────────────
+    # Where scripts/healthcheck.py sends failure notices. Falls back to
+    # TEST_EMAIL, then SMTP_USER, so an unattended deployment always has
+    # somewhere to shout. Deliberately NOT the recipient list: an alert is for
+    # the operator and must ignore unsubscribes.
+    alert_email: str = Field(default="")
+
+    @property
+    def alert_recipient(self) -> str:
+        return self.alert_email or self.test_email or self.smtp_user
+
     # ── Observability ─────────────────────────────────────────────────────────
     # Set LOG_FORMAT=json to emit structured JSON log lines (e.g. in production)
     log_format: str = Field(default="text")

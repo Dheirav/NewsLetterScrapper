@@ -43,6 +43,10 @@ def load_catalog(path: Path = SOURCES_PATH) -> Dict[str, dict]:
                 "tier": s.get("tier", DEFAULT_TIER),
                 "weight": float(s.get("weight", DEFAULT_WEIGHT)),
                 "source_type": s.get("source_type", "news"),
+                # Carried so feed-health checks can probe a source without
+                # parsing sources.yaml a second time.
+                "url": s.get("url", ""),
+                "domain": s.get("domain", ""),
             }
             for s in data.get("sources", [])
         }

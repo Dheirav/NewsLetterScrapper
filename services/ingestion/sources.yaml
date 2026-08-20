@@ -11,19 +11,7 @@
 sources:
 
   # -- World / Politics ------------------------------------------------------
-  - name: "Reuters"
-    url: "https://feeds.reuters.com/reuters/topNews"
-    domain: "World"
-    tier: 1
-    source_type: "news"
-    weight: 1.0
 
-  - name: "Associated Press"
-    url: "https://rsshub.app/apnews/topics/apf-topnews"
-    domain: "World"
-    tier: 1
-    source_type: "news"
-    weight: 1.0
 
   - name: "BBC News"
     url: "https://feeds.bbci.co.uk/news/rss.xml"
@@ -53,13 +41,31 @@ sources:
     source_type: "analysis"
     weight: 0.7
 
-  # -- Technology ------------------------------------------------------------
-  - name: "Ars Technica"
-    url: "https://feeds.arstechnica.com/arstechnica/index"
-    domain: "Technology"
+  # Replaces Reuters: feeds.reuters.com no longer resolves. 140 entries, 3/3 scraped full.
+  - name: "Deutsche Welle"
+    url: "https://rss.dw.com/rdf/rss-en-all"
+    domain: "World"
     tier: 1
-    source_type: "analysis"
-    weight: 0.7
+    source_type: "news"
+    weight: 1.0
+
+  # Replaces Associated Press: its rsshub proxy returns 403. 3/3 scraped full.
+  - name: "ABC News (Australia)"
+    url: "https://www.abc.net.au/news/feed/51120/rss.xml"
+    domain: "World"
+    tier: 1
+    source_type: "news"
+    weight: 1.0
+
+  # Non-anglophone perspective; the surviving mix skewed heavily UK/US.
+  - name: "France 24"
+    url: "https://www.france24.com/en/rss"
+    domain: "World"
+    tier: 2
+    source_type: "news"
+    weight: 0.9
+
+  # -- Technology ------------------------------------------------------------
 
   - name: "The Verge"
     url: "https://www.theverge.com/rss/index.xml"
@@ -111,20 +117,16 @@ sources:
     source_type: "research"
     weight: 0.3
 
-  # -- Economy / Finance -----------------------------------------------------
-  - name: "Financial Times"
-    url: "https://www.ft.com/rss/home"
-    domain: "Economy"
-    tier: 1
-    source_type: "news"
-    weight: 1.0
-
-  - name: "The Economist"
-    url: "https://www.economist.com/latest/rss.xml"
-    domain: "Economy"
-    tier: 1
+  # Academic explainers; recovers some depth lost with Ars Technica (0/40 scrapeable).
+  - name: "The Conversation"
+    url: "https://theconversation.com/articles.atom"
+    domain: "Science"
+    tier: 2
     source_type: "analysis"
-    weight: 0.7
+    weight: 0.6
+
+  # -- Economy / Finance -----------------------------------------------------
+
 
   - name: "Bloomberg Markets"
     url: "https://feeds.bloomberg.com/markets/news.rss"
@@ -132,6 +134,22 @@ sources:
     tier: 1
     source_type: "news"
     weight: 1.0
+
+  # Replaces the FT and The Economist, which delivered entries but 0 scrapeable articles.
+  - name: "CNBC"
+    url: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+    domain: "Economy"
+    tier: 2
+    source_type: "news"
+    weight: 0.9
+
+  # Economy would otherwise be left with Bloomberg alone.
+  - name: "Deutsche Welle Business"
+    url: "https://rss.dw.com/rdf/rss-en-bus"
+    domain: "Economy"
+    tier: 2
+    source_type: "news"
+    weight: 0.9
 
   # -- AI & Machine Learning -------------------------------------------------
   - name: "DeepMind Blog"
@@ -141,12 +159,22 @@ sources:
     source_type: "research"
     weight: 0.4
 
-  - name: "The Batch (deeplearning.ai)"
-    url: "https://www.deeplearning.ai/the-batch/feed/"
+
+  # Replaces The Batch, whose deeplearning.ai feed 404s.
+  - name: "The Gradient"
+    url: "https://thegradient.pub/rss/"
     domain: "AI"
     tier: 2
-    source_type: "analysis"
-    weight: 0.6
+    source_type: "research"
+    weight: 0.3
+
+  # Primary-source model and dataset releases.
+  - name: "Hugging Face Blog"
+    url: "https://huggingface.co/blog/feed.xml"
+    domain: "AI"
+    tier: 2
+    source_type: "research"
+    weight: 0.3
 
   # -- Policy & Society ------------------------------------------------------
   - name: "Politico"
@@ -156,8 +184,18 @@ sources:
     source_type: "analysis"
     weight: 0.6
 
-  - name: "Brookings"
-    url: "https://www.brookings.edu/feed/"
+
+  # Replaces Brookings, whose /feed/ returns HTTP 200 with zero entries.
+  - name: "Foreign Policy"
+    url: "https://foreignpolicy.com/feed/"
+    domain: "Policy"
+    tier: 1
+    source_type: "analysis"
+    weight: 0.7
+
+  # CFR, Chatham House, Lawfare and Carnegie were all tried first: 403 or empty.
+  - name: "Project Syndicate"
+    url: "https://www.project-syndicate.org/rss"
     domain: "Policy"
     tier: 1
     source_type: "analysis"
@@ -200,15 +238,17 @@ sources:
     source_type: "news"
     weight: 0.9
 
-  - name: "The Athletic"
-    url: "https://www.nytimes.com/athletic/rss/"
-    domain: "Sport"
-    tier: 1
-    source_type: "analysis"
-    weight: 0.7
 
   - name: "Yahoo Sports"
     url: "https://sports.yahoo.com/rss/"
+    domain: "Sport"
+    tier: 2
+    source_type: "news"
+    weight: 0.9
+
+  # Replaces The Athletic, whose nytimes.com/athletic/rss path 404s.
+  - name: "Guardian Football"
+    url: "https://www.theguardian.com/football/rss"
     domain: "Sport"
     tier: 2
     source_type: "news"
@@ -272,12 +312,6 @@ sources:
     source_type: "news"
     weight: 0.9
 
-  - name: "NDTV India"
-    url: "https://feeds.feedburner.com/ndtvnews-india-news"
-    domain: "India"
-    tier: 2
-    source_type: "news"
-    weight: 0.9
 
   - name: "Times of India India"
     url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"

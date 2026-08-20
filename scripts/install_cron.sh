@@ -48,6 +48,7 @@ BACKUP_HOUR=""         # defaults to one hour after the pipeline
 SCHED_TZ=""            # interpret --time in this zone, converting to local
 USE_DOCKER=false        # run the pipeline inside the compose stack
 WITH_HEALTHCHECK=true   # alert when a day produces no briefing
+WITH_FEEDCHECK=true     # weekly report of sources that stopped producing
 USE_SYSTEMD=false
 WITH_ARCHIVE=true
 WITH_BACKUP=true
@@ -90,6 +91,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-healthcheck)
       WITH_HEALTHCHECK=false
+      shift
+      ;;
+    --no-feedcheck)
+      WITH_FEEDCHECK=false
       shift
       ;;
     *)
@@ -156,11 +161,13 @@ install_cron() {
     ARCHIVE_RUN="${DC} exec -T app python scripts/archive.py --dry-run"
     BACKUP_RUN="./scripts/backup_db.sh --docker"
     HEALTH_RUN="${DC} exec -T app python scripts/healthcheck.py"
+    FEED_RUN="${DC} exec -T app python scripts/feed_health.py --from-db --days 7"
   else
     RUN="'${PYTHON}' scripts/run_pipeline.py"
     ARCHIVE_RUN="'${PYTHON}' scripts/archive.py --dry-run"
     BACKUP_RUN="./scripts/backup_db.sh"
     HEALTH_RUN="'${PYTHON}' scripts/healthcheck.py"
+    FEED_RUN="'${PYTHON}' scripts/feed_health.py --from-db --days 7"
   fi
 
   local pipeline_cmd="${MINUTE} ${HOUR} * * * cd '${REPO_DIR}' && ${RUN} >> '${LOG_DIR}/pipeline.log' 2>&1"
@@ -173,6 +180,11 @@ install_cron() {
 
   local health_cmd="${MINUTE} ${HEALTH_HOUR} * * * cd '${REPO_DIR}' && ${HEALTH_RUN} >> '${LOG_DIR}/healthcheck.log' 2>&1"
 
+  # Weekly, alongside the archive report. A feed dying is invisible by design —
+  # bad feeds are skipped rather than raised — so nothing else would ever say
+  # that a source stopped producing.
+  local feed_cmd="30 ${ARCHIVE_HOUR} * * ${ARCHIVE_DAY} cd '${REPO_DIR}' && ${FEED_RUN} >> '${LOG_DIR}/feed_health.log' 2>&1"
+
   # `|| true` is load-bearing under `set -euo pipefail`: `crontab -l` exits 1
   # when the user has no crontab yet, and each `grep -v` exits 1 when it filters
   # everything out. Either would abort the install with no output at all —
@@ -184,6 +196,8 @@ install_cron() {
         | grep -v "archive.py" \
         | grep -v "backup_db.sh" \
         | grep -v "healthcheck.py" \
+      | grep -v "feed_health.py" \
+        | grep -v "feed_health.py" \
         | grep -v "^CRON_TZ="; } || true
     if [[ -n "${SCHED_TZ}" ]]; then
       echo "${marker} ${ORIG_TIME} ${SCHED_TZ} = ${HOUR}:${MINUTE} $(date +%Z) (converted; this cron has no CRON_TZ)"
@@ -201,6 +215,10 @@ install_cron() {
     if [[ "${WITH_HEALTHCHECK}" == true ]]; then
       echo "${marker} daily health check"
       echo "${health_cmd}"
+    fi
+    if [[ "${WITH_FEEDCHECK}" == true ]]; then
+      echo "${marker} weekly feed health"
+      echo "${feed_cmd}"
     fi
   } | crontab -
 
@@ -226,6 +244,10 @@ install_cron() {
     echo "  Health:      daily at ${HEALTH_HOUR}:${MINUTE} -> ${LOG_DIR}/healthcheck.log"
     echo "               emails ${ALERT_TO:-the operator} only when a briefing is missing"
   fi
+  if [[ "${WITH_FEEDCHECK}" == true ]]; then
+    echo "  Feeds:       Sundays at ${ARCHIVE_HOUR}:30 -> ${LOG_DIR}/feed_health.log"
+    echo "               reports sources that went silent or stopped scraping"
+  fi
   echo ""
   echo "To check:  crontab -l | grep -E 'intelligence|run_pipeline|archive.py|backup_db'"
   echo "To remove: ./scripts/install_cron.sh --uninstall"
@@ -243,10 +265,11 @@ uninstall_cron() {
       | grep -v "archive.py" \
       | grep -v "backup_db.sh" \
       | grep -v "healthcheck.py" \
+      | grep -v "feed_health.py" \
       | grep -v "^CRON_TZ="; } | crontab - || true
 
   local left
-  left="$(crontab -l 2>/dev/null | grep -cE 'run_pipeline\.py|archive\.py|backup_db\.sh|healthcheck\.py' || true)"
+  left="$(crontab -l 2>/dev/null | grep -cE 'run_pipeline\.py|archive\.py|backup_db\.sh|healthcheck\.py|feed_health\.py' || true)"
   if [[ "${left:-0}" -eq 0 ]]; then
     echo "Cron entries removed. Other crontab entries were left untouched."
   else

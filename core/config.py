@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     ollama_llm_model: str = Field(default="llama3.2")
     ollama_embed_model: str = Field(default="nomic-embed-text")
 
+    # Context window for every Ollama call.
+    #
+    # Ollama defaults to 2048 when this is unset, regardless of what the model
+    # supports — llama3 handles 8192. At the previous prompt size (~1,155
+    # tokens) that ceiling was not binding, so raising it is not a bug fix.
+    # It is a prerequisite: the article budget below now sends ~2,400 tokens of
+    # source material, which would silently overflow a 2048 window on the INPUT
+    # side, truncating the very material the story is written from.
+    ollama_num_ctx: int = Field(default=8192)
+
     # ── Email ─────────────────────────────────────────────────────────────────
     smtp_host: str = Field(default="smtp.gmail.com")
     smtp_port: int = Field(default=587)
@@ -107,6 +117,29 @@ class Settings(BaseSettings):
     # Cap on how many clusters get knowledge stories per run
     # (top N by article count; rest are low-signal)
     max_knowledge_clusters: int = Field(default=20)
+
+    # How much source material each knowledge story is written from.
+    #
+    # Was 4 articles x 800 chars. A 15-article cluster — the best-corroborated
+    # story of the day — therefore reached the model as ~3,200 characters,
+    # roughly 150 words per source, with the rest discarded. Breadth across
+    # sources is weighted over depth per source because cross-confirmation is
+    # what makes "what happened, who is involved" concrete.
+    knowledge_max_articles: int = Field(default=8)
+    knowledge_chars_per_article: int = Field(default=1200)
+
+    # Minimum mean intra-cluster cosine similarity for a cluster to be worth an
+    # LLM call.
+    #
+    # Low-coherence clusters are not events, they are topic buckets: four
+    # unrelated films, four gadget roundups. Asking "what happened, who is
+    # involved" of those produces mush no prompt can rescue.
+    #
+    # Deliberately conservative. Measured on one day, 24 of 44 clusters fell
+    # below 0.75 and the weakest was 0.683 — but one day is not a distribution,
+    # so this drops only the clearly-broken and every run logs the full spread
+    # to tighten against later.
+    min_cluster_coherence: float = Field(default=0.70)
 
     # ── Security ──────────────────────────────────────────────────────────────
     # Static API key checked on every non-health request.

@@ -45,7 +45,8 @@ def _generate_label_sync(titles: List[str]) -> str:
     response = ollama.chat(
         model=settings.ollama_llm_model,
         messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.3, "num_predict": 30},
+        options={"temperature": 0.3, "num_predict": 30,
+                 "num_ctx": settings.ollama_num_ctx},
     )
     label = response["message"]["content"].strip().strip('"').strip("'")
     # Trim to a safe length

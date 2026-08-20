@@ -70,7 +70,8 @@ def _chat_json_sync(prompt: str) -> dict:
     response = ollama.chat(
         model=settings.ollama_llm_model,
         messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.4, "num_predict": 900},
+        options={"temperature": 0.4, "num_predict": 900,
+                 "num_ctx": settings.ollama_num_ctx},
         format="json",
     )
     raw = response["message"]["content"].strip()
@@ -94,7 +95,8 @@ def _chat_text_sync(prompt: str) -> str:
     response = ollama.chat(
         model=settings.ollama_llm_model,
         messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.4, "num_predict": 600},
+        options={"temperature": 0.4, "num_predict": 600,
+                 "num_ctx": settings.ollama_num_ctx},
     )
     return response["message"]["content"].strip()
 
@@ -157,6 +159,73 @@ async def _backfill_talking_points(
     return existing
 
 
+def cluster_coherence(cluster: StoryCluster) -> float:
+    """
+    Mean pairwise cosine similarity between a cluster's article embeddings.
+
+    Separates events from topic buckets. A real event scores high because every
+    article describes the same thing; a bucket scores low because the only thing
+    its members share is a section of the newspaper. Two observed extremes:
+
+        0.68  X-Men casting / a Netflix thriller / a BBC drama trailer
+        0.65  cheap laptops / eclipse planning / a USB necklace
+
+    Asking "what happened, who is involved" of either produces mush, and no
+    prompt or context window fixes a cluster that is not a story.
+
+    Returns 1.0 for a single article — trivially self-consistent, and singletons
+    are filtered earlier by min_cluster_articles anyway. Returns 1.0 when
+    embeddings are missing rather than 0.0, so a missing vector cannot silently
+    suppress a story.
+    """
+    vectors = [a.embedding for a in cluster.articles if a.embedding]
+    if len(vectors) < 2:
+        return 1.0
+
+    import numpy as np
+
+    matrix = np.asarray(vectors, dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    matrix = matrix / np.where(norms == 0, 1.0, norms)
+    sims = matrix @ matrix.T
+    upper = np.triu_indices(len(matrix), k=1)
+    return float(sims[upper].mean())
+
+
+def _filter_incoherent(clusters: List[StoryCluster], threshold: float) -> List[StoryCluster]:
+    """
+    Drop clusters that are not events, and log the full spread either way.
+
+    The logging is the point as much as the filter: the threshold was chosen
+    from a single day's distribution, so every run needs to report where the
+    clusters actually fell for it to be tuned against real data later.
+    """
+    scored = [(c, cluster_coherence(c)) for c in clusters]
+    if not scored:
+        return []
+
+    values = sorted(s for _, s in scored)
+    log.info(
+        "Cluster coherence: min %.3f, median %.3f, max %.3f (threshold %.2f)",
+        values[0], values[len(values) // 2], values[-1], threshold,
+    )
+
+    kept, dropped = [], []
+    for cluster, score in scored:
+        (kept if score >= threshold else dropped).append((cluster, score))
+
+    for cluster, score in sorted(dropped, key=lambda x: x[1]):
+        log.info(
+            "  not an event (%.3f), skipping: '%s'", score, cluster.topic_label[:60]
+        )
+    if dropped:
+        log.info(
+            "Dropped %d of %d clusters below coherence %.2f — no LLM calls spent on them",
+            len(dropped), len(scored), threshold,
+        )
+    return [c for c, _ in kept]
+
+
 async def _generate_one_concise(cluster: StoryCluster) -> KnowledgeStory | None:
     """
     CONCISE mode: generate all five knowledge sections in a single LLM call
@@ -165,7 +234,11 @@ async def _generate_one_concise(cluster: StoryCluster) -> KnowledgeStory | None:
     DB persistence is intentionally excluded here so that multiple concurrent
     invocations do not race on the same AsyncSession.
     """
-    articles_text = build_articles_text(cluster.articles)
+    articles_text = build_articles_text(
+        cluster.articles,
+        max_chars_per_article=settings.knowledge_chars_per_article,
+        max_articles=settings.knowledge_max_articles,
+    )
     prompt = COMBINED_STORY_PROMPT.format(
         topic_label=cluster.topic_label,
         articles_text=articles_text,
@@ -321,6 +394,10 @@ async def generate_knowledge_stories(
             "Skipping %d singleton clusters — %d multi-article clusters will be processed",
             skipped, len(meaningful),
         )
+
+    # Coherence gate first, so the top-N cap below ranks among real events
+    # rather than spending its budget on topic buckets that happen to be large.
+    meaningful = _filter_incoherent(meaningful, settings.min_cluster_coherence)
 
     # rank by richness and keep top N; tail clusters are low-signal
     meaningful.sort(key=lambda c: len(c.articles), reverse=True)

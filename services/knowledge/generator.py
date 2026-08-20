@@ -178,7 +178,15 @@ def cluster_coherence(cluster: StoryCluster) -> float:
     embeddings are missing rather than 0.0, so a missing vector cannot silently
     suppress a story.
     """
-    vectors = [a.embedding for a in cluster.articles if a.embedding]
+    # `is not None`, never truthiness. Embeddings arrive as Python lists from
+    # the embedder but as numpy arrays when reloaded from pgvector on the step-5
+    # resume path, and bool(ndarray) raises "truth value of an array ... is
+    # ambiguous". Every other consumer in the pipeline already gets this right;
+    # this one crashed the whole run after a restart.
+    vectors = [
+        a.embedding for a in cluster.articles
+        if a.embedding is not None and len(a.embedding) > 0
+    ]
     if len(vectors) < 2:
         return 1.0
 

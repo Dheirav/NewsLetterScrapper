@@ -129,3 +129,72 @@ def test_context_window_exceeds_the_configured_prompt_budget():
     assert s.ollama_num_ctx > approx_prompt_tokens + 900 + 400, (
         "num_ctx leaves no room for the prompt plus num_predict"
     )
+
+
+# ── Embedding representation ─────────────────────────────────────────────────
+
+def test_numpy_embeddings_do_not_raise():
+    """
+    The regression. Embeddings are Python lists coming from the embedder, but
+    numpy arrays when reloaded from pgvector on the step-5 resume path. The
+    original `if a.embedding` truthiness test raised
+    "truth value of an array with more than one element is ambiguous" and took
+    down the whole run — the crash-recovery path specifically, which is exactly
+    when you least want another failure.
+    """
+    import numpy as np
+
+    def npvec(i, n=DIM):
+        v = np.zeros(n, dtype=np.float32)
+        v[i] = 1.0
+        return v
+
+    c = StoryCluster("x", "x", [_article(npvec(0)), _article(npvec(0))], None)
+    assert cluster_coherence(c) == pytest.approx(1.0)
+
+
+def test_numpy_and_list_embeddings_agree():
+    import numpy as np
+
+    as_list = [1.0] + [0.0] * (DIM - 1)
+    as_np = np.asarray(as_list, dtype=np.float32)
+
+    lists = StoryCluster("a", "a", [_article(as_list), _article(as_list)], None)
+    arrays = StoryCluster("b", "b", [_article(as_np), _article(as_np)], None)
+
+    assert cluster_coherence(lists) == pytest.approx(cluster_coherence(arrays))
+
+
+def test_mixed_representations_and_none_are_tolerated():
+    import numpy as np
+
+    c = StoryCluster("x", "x", [
+        _article(np.asarray([1.0] + [0.0] * (DIM - 1), dtype=np.float32)),
+        _article([1.0] + [0.0] * (DIM - 1)),
+        _article(None),
+    ], None)
+    assert cluster_coherence(c) == pytest.approx(1.0)
+
+
+def test_empty_embedding_is_ignored_not_crashed():
+    import numpy as np
+    c = StoryCluster("x", "x", [
+        _article(np.asarray([], dtype=np.float32)), _article(None)
+    ], None)
+    assert cluster_coherence(c) == 1.0
+
+
+def test_the_gate_survives_numpy_input():
+    """_filter_incoherent is what actually crashed the pipeline."""
+    import numpy as np
+
+    def npvec(i, n=DIM):
+        v = np.zeros(n, dtype=np.float32)
+        v[i] = 1.0
+        return v
+
+    good = StoryCluster("good", "good", [_article(npvec(0)), _article(npvec(0))], None)
+    bad = StoryCluster("bad", "bad", [_article(npvec(0)), _article(npvec(300))], None)
+
+    kept = _filter_incoherent([good, bad], threshold=0.70)
+    assert [c.topic_label for c in kept] == ["good"]

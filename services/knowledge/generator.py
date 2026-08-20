@@ -59,7 +59,14 @@ log = logging.getLogger(__name__)
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=15),
-    retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+    # JSONDecodeError is retried alongside the transport errors. A malformed
+    # response is transient in exactly the same way a dropped connection is —
+    # the next sample usually parses — but without this a single truncated
+    # string loses the whole story to the dead-letter queue. Measured at 1 in 5
+    # when the prompt asks for longer output.
+    retry=retry_if_exception_type(
+        (ConnectionError, TimeoutError, OSError, json.JSONDecodeError)
+    ),
     reraise=True,
 )
 def _chat_json_sync(prompt: str) -> dict:
@@ -70,7 +77,10 @@ def _chat_json_sync(prompt: str) -> dict:
     response = ollama.chat(
         model=settings.ollama_llm_model,
         messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.4, "num_predict": 900,
+        # 2000, not 900: the prompt now asks for ~250 words across four sections
+        # plus five talking points. At 900 the JSON is cut mid-string and the
+        # whole story is lost, which is what the retry above exists to survive.
+        options={"temperature": 0.4, "num_predict": 2000,
                  "num_ctx": settings.ollama_num_ctx},
         format="json",
     )
